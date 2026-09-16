@@ -20,7 +20,7 @@
     margin:0;
     background:var(--chalk);
     color:var(--ink);
-    font-family: "Iowan Old Style","Georgia",serif;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
   }
   header{
     background:linear-gradient(180deg,var(--grass) 0%,var(--grass-deep) 100%);
@@ -99,6 +99,7 @@
   }
   thead th.sorted{color:var(--grass-deep);}
   thead th.sorted::after{content:" ▾";font-size:.65em;}
+  thead th.num{text-align:right;}
   tbody td{
     padding:.55rem;
     border-bottom:1px solid var(--line);
@@ -306,7 +307,7 @@ function render() {
   }
 
   const thead = `<thead><tr>${cols.map(c =>
-    `<th data-key="${c.key}" class="${state.sort === c.key ? 'sorted' : ''}">${c.label}</th>`
+    `<th data-key="${c.key}" class="${c.type === 'num' ? 'num' : ''} ${state.sort === c.key ? 'sorted' : ''}">${c.label}</th>`
   ).join("")}</tr></thead>`;
 
   const tbody = `<tbody>${rows.map(r => `<tr>${cols.map(c => {

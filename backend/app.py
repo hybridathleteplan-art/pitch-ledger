@@ -31,8 +31,84 @@ def health():
 
 @app.get("/api/teams")
 def list_teams():
+    """
+    Standings (W/D/L/Pts/GF/GA), xG for/against, and touches-in-box are all
+    computed live here rather than read from static columns - those columns
+    on the teams table are never populated by any scraper, so reading them
+    directly always returned zeros. This computes the real numbers from data
+    that IS populated: finished fixtures (results), player_gameweeks (xG),
+    and players (touches, from fbref_scraper.py).
+    """
+    query = """
+        SELECT
+            t.team_id, t.name, t.short_name, t.strength,
+            COALESCE(res.played, 0) AS played,
+            COALESCE(res.wins, 0) AS wins,
+            COALESCE(res.draws, 0) AS draws,
+            COALESCE(res.losses, 0) AS losses,
+            COALESCE(res.points, 0) AS points,
+            COALESCE(res.goals_for, 0) AS goals_for,
+            COALESCE(res.goals_against, 0) AS goals_against,
+            COALESCE(xg.xg_for, 0) AS xg_for,
+            COALESCE(xg.xg_against, 0) AS xg_against,
+            COALESCE(touch.touches_opp_box, 0) AS touches_opp_box,
+            t.updated_at
+        FROM teams t
+        LEFT JOIN (
+            -- one row per finished fixture per team (home leg + away leg unioned),
+            -- then aggregated into standard standings math
+            SELECT team_id,
+                   COUNT(*) AS played,
+                   SUM(CASE WHEN result = 'W' THEN 1 ELSE 0 END) AS wins,
+                   SUM(CASE WHEN result = 'D' THEN 1 ELSE 0 END) AS draws,
+                   SUM(CASE WHEN result = 'L' THEN 1 ELSE 0 END) AS losses,
+                   SUM(CASE WHEN result = 'W' THEN 3 WHEN result = 'D' THEN 1 ELSE 0 END) AS points,
+                   SUM(goals_for) AS goals_for,
+                   SUM(goals_against) AS goals_against
+            FROM (
+                SELECT team_h AS team_id, team_h_score AS goals_for, team_a_score AS goals_against,
+                       CASE WHEN team_h_score > team_a_score THEN 'W'
+                            WHEN team_h_score = team_a_score THEN 'D' ELSE 'L' END AS result
+                FROM fixtures WHERE finished = 1
+                UNION ALL
+                SELECT team_a AS team_id, team_a_score AS goals_for, team_h_score AS goals_against,
+                       CASE WHEN team_a_score > team_h_score THEN 'W'
+                            WHEN team_a_score = team_h_score THEN 'D' ELSE 'L' END AS result
+                FROM fixtures WHERE finished = 1
+            ) results
+            GROUP BY team_id
+        ) res ON res.team_id = t.team_id
+        LEFT JOIN (
+            SELECT team_id, AVG(team_xg) AS xg_for, AVG(opp_xg) AS xg_against
+            FROM (
+                SELECT tg.team_id, tg.gameweek, tg.team_xg,
+                       opp.team_xg AS opp_xg
+                FROM (
+                    -- one row per (team, gameweek): that team's total xG that gameweek
+                    SELECT p.team_id AS team_id, pg.gameweek AS gameweek,
+                           MAX(pg.opponent_team_id) AS opponent_team_id,
+                           SUM(pg.xg) AS team_xg
+                    FROM player_gameweeks pg JOIN players p ON p.player_id = pg.player_id
+                    WHERE pg.minutes > 0
+                    GROUP BY p.team_id, pg.gameweek
+                ) tg
+                LEFT JOIN (
+                    SELECT p.team_id AS team_id, pg.gameweek AS gameweek, SUM(pg.xg) AS team_xg
+                    FROM player_gameweeks pg JOIN players p ON p.player_id = pg.player_id
+                    WHERE pg.minutes > 0
+                    GROUP BY p.team_id, pg.gameweek
+                ) opp ON opp.team_id = tg.opponent_team_id AND opp.gameweek = tg.gameweek
+            ) per_gw
+            GROUP BY team_id
+        ) xg ON xg.team_id = t.team_id
+        LEFT JOIN (
+            SELECT team_id, SUM(touches_opp_box) AS touches_opp_box
+            FROM players GROUP BY team_id
+        ) touch ON touch.team_id = t.team_id
+        ORDER BY t.name
+    """
     with get_conn() as conn:
-        rows = conn.execute("SELECT * FROM teams ORDER BY name").fetchall()
+        rows = conn.execute(query).fetchall()
     return [dict(r) for r in rows]
 
 
