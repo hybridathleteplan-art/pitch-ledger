@@ -1,0 +1,7 @@
+fastapi
+uvicorn
+requests
+pandas
+lxml
+html5lib
+beautifulsoup4

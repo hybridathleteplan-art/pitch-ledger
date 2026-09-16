@@ -1,0 +1,511 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Pitch Ledger — Premier League Stats</title>
+<style>
+  :root{
+    --grass:#1b4332;
+    --grass-deep:#0f2a1e;
+    --chalk:#f6f5f0;
+    --ink:#12201a;
+    --line:#d8d3c4;
+    --gold:#c8a24a;
+    --mid:#5c6b62;
+    --r1:#2f7d4f; --r2:#7aa653; --r3:#d8c24a; --r4:#d17a3a; --r5:#b23b3b;
+  }
+  *{box-sizing:border-box;}
+  body{
+    margin:0;
+    background:var(--chalk);
+    color:var(--ink);
+    font-family: "Iowan Old Style","Georgia",serif;
+  }
+  header{
+    background:linear-gradient(180deg,var(--grass) 0%,var(--grass-deep) 100%);
+    color:var(--chalk);
+    padding:2.2rem 1.5rem 1.6rem;
+    border-bottom:4px solid var(--gold);
+  }
+  header h1{
+    margin:0;
+    font-size:clamp(1.6rem,4vw,2.4rem);
+    font-weight:600;
+    letter-spacing:0.01em;
+  }
+  header p{
+    margin:.4rem 0 0;
+    font-family:"Helvetica Neue",Arial,sans-serif;
+    font-size:.85rem;
+    color:#cfe3d8;
+  }
+  #gw-badge{
+    display:inline-block;
+    margin-top:.9rem;
+    font-family:"Helvetica Neue",Arial,sans-serif;
+    font-size:.72rem;
+    letter-spacing:.04em;
+    background:rgba(255,255,255,.08);
+    border:1px solid rgba(255,255,255,.25);
+    padding:.3rem .7rem;
+    border-radius:3px;
+  }
+
+  main{max-width:1100px;margin:0 auto;padding:1.6rem 1.5rem 4rem;}
+
+  .controls{
+    display:flex;
+    flex-wrap:wrap;
+    gap:.6rem;
+    align-items:center;
+    margin-bottom:1.2rem;
+    font-family:"Helvetica Neue",Arial,sans-serif;
+  }
+  .controls select, .controls input{
+    font-family:inherit;
+    font-size:.85rem;
+    padding:.45rem .6rem;
+    border:1px solid var(--line);
+    border-radius:3px;
+    background:#fff;
+    color:var(--ink);
+  }
+  .controls input{flex:1;min-width:160px;}
+  .toggle-group{display:flex;border:1px solid var(--grass);border-radius:3px;overflow:hidden;}
+  .toggle-group button{
+    font-family:inherit;
+    font-size:.85rem;
+    background:#fff;
+    border:none;
+    padding:.45rem .9rem;
+    cursor:pointer;
+    color:var(--grass-deep);
+  }
+  .toggle-group button.active{background:var(--grass);color:#fff;}
+
+  table{width:100%;border-collapse:collapse;font-size:.88rem;}
+  thead th{
+    text-align:left;
+    font-family:"Helvetica Neue",Arial,sans-serif;
+    font-weight:600;
+    font-size:.7rem;
+    letter-spacing:.03em;
+    color:var(--mid);
+    border-bottom:2px solid var(--grass);
+    padding:.5rem .55rem;
+    cursor:pointer;
+    white-space:nowrap;
+  }
+  thead th.sorted{color:var(--grass-deep);}
+  thead th.sorted::after{content:" ▾";font-size:.65em;}
+  tbody td{
+    padding:.55rem;
+    border-bottom:1px solid var(--line);
+    white-space:nowrap;
+  }
+  tbody tr:hover{background:#eee9db;}
+  td.name{font-weight:600;}
+  td.team{color:var(--mid);font-family:"Helvetica Neue",Arial,sans-serif;font-size:.78rem;}
+  td.num{text-align:right;font-variant-numeric:tabular-nums;}
+  .pos-badge{
+    font-family:"Helvetica Neue",Arial,sans-serif;
+    font-size:.65rem;
+    padding:.12rem .4rem;
+    border-radius:2px;
+    background:#e4ddc7;
+    color:var(--grass-deep);
+  }
+
+  .empty, .loading{
+    font-family:"Helvetica Neue",Arial,sans-serif;
+    color:var(--mid);
+    padding:2rem 0;
+    text-align:center;
+  }
+  footer{
+    text-align:center;
+    font-family:"Helvetica Neue",Arial,sans-serif;
+    font-size:.72rem;
+    color:var(--mid);
+    padding:2rem 0;
+  }
+
+  .legend{display:flex;flex-wrap:wrap;align-items:center;gap:.9rem;margin:0 0 1.1rem;
+    font-family:"Helvetica Neue",Arial,sans-serif;font-size:.74rem;color:var(--mid);}
+  .legend .scale{display:flex;align-items:center;gap:.35rem;}
+  .legend .swatch{width:16px;height:16px;border-radius:3px;display:inline-block;}
+  .ticker-sub{font-family:"Helvetica Neue",Arial,sans-serif;font-size:.74rem;color:var(--mid);margin:-.5rem 0 .9rem;}
+  .ticker-row{display:flex;align-items:center;gap:.5rem;padding:.5rem 0;border-bottom:1px solid var(--line);}
+  .ticker-row .team{width:150px;flex-shrink:0;font-weight:600;font-size:.85rem;}
+  .ticker-row .fixtures{display:flex;gap:.3rem;flex-wrap:wrap;}
+  .chip{width:64px;padding:.3rem 0;text-align:center;border-radius:3px;font-family:"Helvetica Neue",Arial,sans-serif;
+    font-size:.68rem;color:#fff;line-height:1.25;}
+  .chip .opp{display:block;font-weight:700;font-size:.72rem;}
+  .chip .venue{opacity:.85;font-size:.6rem;}
+  .chip .odds{display:block;opacity:.9;font-size:.58rem;margin-top:.1rem;}
+  .chip.cup{background:#8a8d87;}
+  .chip.cup .comp{display:block;font-size:.58rem;opacity:.9;text-transform:uppercase;letter-spacing:.02em;}
+  .ticker-heading{font-size:1rem;font-weight:600;margin:1.6rem 0 .3rem;}
+  .ticker-heading:first-child{margin-top:0;}
+</style>
+</head>
+<body>
+
+<header>
+  <h1>Pitch Ledger</h1>
+  <p>Premier League player &amp; team data, current season</p>
+  <span id="gw-badge">Loading gameweek…</span>
+</header>
+
+<main>
+  <div class="controls">
+    <div class="toggle-group" id="view-toggle">
+      <button data-view="players" class="active">Players</button>
+      <button data-view="teams">Teams</button>
+      <button data-view="fixtures">Fixtures</button>
+    </div>
+    <select id="position-filter">
+      <option value="">All positions</option>
+      <option value="GK">Goalkeepers</option>
+      <option value="DEF">Defenders</option>
+      <option value="MID">Midfielders</option>
+      <option value="FWD">Forwards</option>
+    </select>
+    <select id="ticker-sort" style="display:none;">
+      <option value="best">Best run first</option>
+      <option value="worst">Worst run first</option>
+      <option value="az">Team name A–Z</option>
+    </select>
+    <select id="ticker-count" style="display:none;">
+      <option value="5">Next 5 fixtures</option>
+      <option value="10">Next 10</option>
+      <option value="15">Next 15</option>
+      <option value="all">All remaining</option>
+    </select>
+    <input id="search" type="text" placeholder="Search player or team…" />
+  </div>
+
+  <div id="table-wrap">
+    <div class="loading">Loading data…</div>
+  </div>
+</main>
+
+<footer>
+  Data: official FPL API (goals, assists, xG, xA, minutes) + FBref (touches in box, progressive actions).
+  Refreshed after each gameweek.
+</footer>
+
+<script>
+// On Vercel, frontend and API are the same deployment/domain, so leave
+// this empty - requests go to /api/players etc. on whatever origin serves
+// this page. Only set an absolute URL here if you're running the backend
+// separately (e.g. local dev with `uvicorn app:app` on a different port,
+// or a split deployment like Railway+Vercel).
+const API_BASE = "";
+
+const PLAYER_COLUMNS = [
+  { key: "name", label: "Player", type: "text" },
+  { key: "team_short", label: "Team", type: "text" },
+  { key: "position", label: "Pos", type: "text" },
+  { key: "min_per_game", label: "Min/game", type: "num" },
+  { key: "goals", label: "G", type: "num" },
+  { key: "assists", label: "A", type: "num" },
+  { key: "xg", label: "xG", type: "num", decimals: 2 },
+  { key: "xa", label: "xA", type: "num", decimals: 2 },
+  { key: "shots_on_target", label: "SoT", type: "num" },
+  { key: "touches_opp_box", label: "Touches (opp box)", type: "num" },
+  { key: "defcon_per_game", label: "DefCon/game", type: "num", decimals: 1 },
+  { key: "bonus_per_game", label: "Bonus/game", type: "num", decimals: 1 },
+  { key: "cs_per_game", label: "CS/game", type: "num", decimals: 2 },
+  { key: "points_per_game", label: "Pts/game", type: "num", decimals: 1 },
+  { key: "pts_per_game_home", label: "Pts (H)", type: "num", decimals: 1 },
+  { key: "pts_per_game_away", label: "Pts (A)", type: "num", decimals: 1 },
+  { key: "ict_index", label: "ICT", type: "num", decimals: 1 },
+];
+
+const TEAM_COLUMNS = [
+  { key: "name", label: "Team", type: "text" },
+  { key: "played", label: "P", type: "num" },
+  { key: "wins", label: "W", type: "num" },
+  { key: "draws", label: "D", type: "num" },
+  { key: "losses", label: "L", type: "num" },
+  { key: "points", label: "Pts", type: "num" },
+  { key: "goals_for", label: "GF", type: "num" },
+  { key: "goals_against", label: "GA", type: "num" },
+  { key: "xg_for", label: "xGF", type: "num", decimals: 2 },
+  { key: "xg_against", label: "xGA", type: "num", decimals: 2 },
+];
+
+let state = {
+  view: "players",
+  sort: "goals",
+  order: "desc",
+  position: "",
+  search: "",
+  rows: [],
+};
+
+async function fetchPlayers() {
+  const params = new URLSearchParams({ sort: state.sort, order: state.order, limit: 300 });
+  if (state.position) params.set("position", state.position);
+  const res = await fetch(`${API_BASE}/api/players?${params}`);
+  return res.json();
+}
+
+async function fetchTeams() {
+  const res = await fetch(`${API_BASE}/api/teams`);
+  return res.json();
+}
+
+async function fetchXgRatings() {
+  const res = await fetch(`${API_BASE}/api/teams/xg-ratings`);
+  return res.json();
+}
+
+async function fetchFixtures() {
+  const res = await fetch(`${API_BASE}/api/fixtures?upcoming_only=true&limit=400`);
+  return res.json();
+}
+
+async function fetchHealth() {
+  try {
+    const res = await fetch(`${API_BASE}/api/health`);
+    const data = await res.json();
+    document.getElementById("gw-badge").textContent = data.current_gameweek
+      ? `Gameweek ${data.current_gameweek}`
+      : "No data yet — run the scrapers";
+  } catch {
+    document.getElementById("gw-badge").textContent = "Backend not reachable";
+  }
+}
+
+function fmt(val, col) {
+  if (val === null || val === undefined) return "—";
+  if (col.type === "num" && col.decimals) return Number(val).toFixed(col.decimals);
+  return val;
+}
+
+function render() {
+  const cols = state.view === "players" ? PLAYER_COLUMNS : TEAM_COLUMNS;
+  let rows = state.rows;
+
+  if (state.search) {
+    const q = state.search.toLowerCase();
+    rows = rows.filter(r =>
+      (r.name || "").toLowerCase().includes(q) ||
+      (r.team_name || "").toLowerCase().includes(q) ||
+      (r.team_short || "").toLowerCase().includes(q)
+    );
+  }
+
+  if (!rows.length) {
+    document.getElementById("table-wrap").innerHTML =
+      `<div class="empty">No data yet. Run <code>fpl_scraper.py</code> (and optionally <code>fbref_scraper.py</code>) against the backend, then reload.</div>`;
+    return;
+  }
+
+  const thead = `<thead><tr>${cols.map(c =>
+    `<th data-key="${c.key}" class="${state.sort === c.key ? 'sorted' : ''}">${c.label}</th>`
+  ).join("")}</tr></thead>`;
+
+  const tbody = `<tbody>${rows.map(r => `<tr>${cols.map(c => {
+    if (c.key === "name") return `<td class="name">${r[c.key] ?? "—"}</td>`;
+    if (c.key === "team_short" || (c.key === "name" && state.view === "teams")) return `<td class="team">${r[c.key] ?? "—"}</td>`;
+    if (c.key === "position") return `<td><span class="pos-badge">${r[c.key] ?? "—"}</span></td>`;
+    if (c.type === "num") return `<td class="num">${fmt(r[c.key], c)}</td>`;
+    return `<td>${r[c.key] ?? "—"}</td>`;
+  }).join("")}</tr>`).join("")}</tbody>`;
+
+  document.getElementById("table-wrap").innerHTML = `<table>${thead}${tbody}</table>`;
+
+  document.querySelectorAll("thead th").forEach(th => {
+    th.addEventListener("click", () => {
+      const key = th.dataset.key;
+      if (state.view === "players") {
+        if (state.sort === key) state.order = state.order === "desc" ? "asc" : "desc";
+        else { state.sort = key; state.order = "desc"; }
+        loadPlayers();
+      } else {
+        // client-side sort for teams (small dataset, no need to round-trip)
+        state.rows.sort((a, b) => {
+          const av = a[key], bv = b[key];
+          if (typeof av === "string") return av.localeCompare(bv);
+          return (bv ?? 0) - (av ?? 0);
+        });
+        render();
+      }
+    });
+  });
+}
+
+async function loadPlayers() {
+  document.getElementById("table-wrap").innerHTML = `<div class="loading">Loading…</div>`;
+  state.rows = await fetchPlayers();
+  render();
+}
+
+async function loadTeams() {
+  document.getElementById("table-wrap").innerHTML = `<div class="loading">Loading…</div>`;
+  state.rows = await fetchTeams();
+  render();
+}
+
+async function fetchCupFixtures() {
+  const res = await fetch(`${API_BASE}/api/fixtures/cup`);
+  return res.json();
+}
+
+const RATING_COLOR = {1:"var(--r1)",2:"var(--r2)",3:"var(--r3)",4:"var(--r4)",5:"var(--r5)"};
+
+function nextFixturesForTeam(teamId, fixtures, ratingsByTeam, n = 5) {
+  return fixtures
+    .filter(f => f.team_h === teamId || f.team_a === teamId)
+    .slice(0, n)
+    .map(f => {
+      const isHome = f.team_h === teamId;
+      const oppId = isHome ? f.team_a : f.team_h;
+      const opp = ratingsByTeam[oppId];
+      if (!opp) return null;
+      // opponent's rating AT THAT VENUE (opponent is away if we're home, and vice versa)
+      const atkDiff = isHome ? opp.away_defense_rating : opp.home_defense_rating;
+      const defDiff = isHome ? opp.away_attack_rating : opp.home_attack_rating;
+      const winPct = isHome ? f.home_win_pct : f.away_win_pct;
+      return {
+        type: "pl", gw: f.gameweek, opp: opp.short_name, venue: isHome ? "H" : "A",
+        atkDiff, defDiff, winPct, bttsPct: f.btts_yes_pct,
+      };
+    })
+    .filter(Boolean);
+}
+
+function cupFixturesInRange(teamId, cupFixtures, minGw, maxGw) {
+  return cupFixtures
+    .filter(f => f.team_id === teamId && f.near_gameweek >= minGw && f.near_gameweek <= maxGw)
+    .map(f => ({
+      type: "cup", gw: f.near_gameweek, opp: f.opponent_name, venue: f.is_home ? "H" : "A",
+      competition: f.competition,
+    }));
+}
+
+function oddsLine(f) {
+  const parts = [];
+  if (f.winPct != null) parts.push(`W ${Math.round(f.winPct * 100)}%`);
+  if (f.bttsPct != null) parts.push(`BTTS ${Math.round(f.bttsPct * 100)}%`);
+  return parts.join(" · ");
+}
+
+async function loadFixtureTicker() {
+  document.getElementById("table-wrap").innerHTML = `<div class="loading">Loading…</div>`;
+  const [ratings, fixtures, cupFixtures] = await Promise.all([fetchXgRatings(), fetchFixtures(), fetchCupFixtures()]);
+  const ratingsByTeam = Object.fromEntries(ratings.map(r => [r.team_id, r]));
+  const sortMode = document.getElementById("ticker-sort").value;
+  const countValue = document.getElementById("ticker-count").value;
+  const fixtureCount = countValue === "all" ? Infinity : parseInt(countValue, 10);
+
+  function buildTicker(diffKey) {
+    let teamsToRender = ratings.map(r => {
+      const plFx = nextFixturesForTeam(r.team_id, fixtures, ratingsByTeam, fixtureCount);
+      const gws = plFx.map(f => f.gw);
+      const minGw = gws.length ? Math.min(...gws) : null;
+      const maxGw = gws.length ? Math.max(...gws) : null;
+      const cupFx = minGw !== null ? cupFixturesInRange(r.team_id, cupFixtures, minGw, maxGw) : [];
+      const combined = [...plFx, ...cupFx].sort((a, b) => a.gw - b.gw);
+      return { r, fx: combined };
+    });
+    teamsToRender.forEach(row => {
+      const vals = row.fx.filter(f => f.type === "pl").map(f => f[diffKey]).filter(v => v !== null && v !== undefined);
+      row.avg = vals.length ? vals.reduce((s, v) => s + v, 0) / vals.length : 99; // unrated teams sort last
+    });
+    if (sortMode === "best") teamsToRender.sort((a, b) => a.avg - b.avg);
+    else if (sortMode === "worst") teamsToRender.sort((a, b) => b.avg - a.avg);
+    else teamsToRender.sort((a, b) => a.r.name.localeCompare(b.r.name));
+
+    return teamsToRender.map(({ r, fx }) => {
+      if (!fx.length) {
+        return `<div class="ticker-row"><div class="team">${r.name}</div><div class="fixtures" style="color:var(--mid);font-family:'Helvetica Neue',Arial,sans-serif;font-size:.78rem;">No upcoming fixtures loaded</div></div>`;
+      }
+      const chips = fx.map(f => {
+        if (f.type === "cup") {
+          return `<div class="chip cup">
+            <span class="comp">${f.competition}</span>
+            <span class="opp">${f.opp}</span>
+            <span class="venue">${f.venue} · midweek</span>
+          </div>`;
+        }
+        const diff = f[diffKey];
+        const color = diff ? RATING_COLOR[diff] : "var(--mid)";
+        const odds = oddsLine(f);
+        return `<div class="chip" style="background:${color}">
+          <span class="opp">${f.opp}</span>
+          <span class="venue">${f.venue} · GW${f.gw}</span>
+          ${odds ? `<span class="odds">${odds}</span>` : ""}
+        </div>`;
+      }).join("");
+      return `<div class="ticker-row"><div class="team">${r.name}</div><div class="fixtures">${chips}</div></div>`;
+    }).join("");
+  }
+
+  const hasAnyRating = ratings.some(r => r.home_attack_rating !== null || r.away_attack_rating !== null);
+  if (!hasAnyRating) {
+    document.getElementById("table-wrap").innerHTML =
+      `<div class="empty">No xG data yet. Run <code>fpl_scraper.py</code> so gameweek history (and xG) gets pulled, then reload.</div>`;
+    return;
+  }
+
+  document.getElementById("table-wrap").innerHTML = `
+    <div class="legend">
+      <span style="font-weight:600;color:var(--ink);">Difficulty (based on xG):</span>
+      <span class="scale"><span class="swatch" style="background:var(--r1)"></span>1 · Easiest</span>
+      <span class="scale"><span class="swatch" style="background:var(--r2)"></span>2</span>
+      <span class="scale"><span class="swatch" style="background:var(--r3)"></span>3</span>
+      <span class="scale"><span class="swatch" style="background:var(--r4)"></span>4</span>
+      <span class="scale"><span class="swatch" style="background:var(--r5)"></span>5 · Hardest</span>
+      <span class="scale"><span class="swatch" style="background:#8a8d87"></span>Cup / European (unrated, shown so midweek fatigue is visible)</span>
+    </div>
+    <div class="ticker-heading">Attacking fixture ticker</div>
+    <div class="ticker-sub">Difficulty = strength of the opponent's xG-conceded at that venue. Green = leaky defense, good for your attackers. W/CS/BTTS % come from bookmaker odds where available.</div>
+    <div>${buildTicker("atkDiff")}</div>
+    <div class="ticker-heading">Defensive fixture ticker</div>
+    <div class="ticker-sub">Difficulty = strength of the opponent's xG at that venue. Green = blunt attack, good clean-sheet odds.</div>
+    <div>${buildTicker("defDiff")}</div>
+  `;
+}
+
+document.getElementById("view-toggle").addEventListener("click", (e) => {
+  const btn = e.target.closest("button");
+  if (!btn) return;
+  document.querySelectorAll("#view-toggle button").forEach(b => b.classList.remove("active"));
+  btn.classList.add("active");
+  state.view = btn.dataset.view;
+  document.getElementById("position-filter").style.display = state.view === "players" ? "" : "none";
+  document.getElementById("ticker-sort").style.display = state.view === "fixtures" ? "" : "none";
+  document.getElementById("ticker-count").style.display = state.view === "fixtures" ? "" : "none";
+  if (state.view === "players") { state.sort = "goals"; loadPlayers(); }
+  else if (state.view === "teams") { state.sort = "points"; loadTeams(); }
+  else loadFixtureTicker();
+});
+
+document.getElementById("ticker-sort").addEventListener("change", () => {
+  if (state.view === "fixtures") loadFixtureTicker();
+});
+
+document.getElementById("ticker-count").addEventListener("change", () => {
+  if (state.view === "fixtures") loadFixtureTicker();
+});
+
+document.getElementById("position-filter").addEventListener("change", (e) => {
+  state.position = e.target.value;
+  if (state.view === "players") loadPlayers();
+});
+
+document.getElementById("search").addEventListener("input", (e) => {
+  state.search = e.target.value;
+  render();
+});
+
+fetchHealth();
+loadPlayers();
+</script>
+</body>
+</html>
