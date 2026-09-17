@@ -530,8 +530,24 @@ async function loadFixtureTicker() {
 }
 
 function buildXgTable(ratings) {
+  // combined = weighted average across home+away games, weighted by how many
+  // games were actually played at each venue (not just a flat average of the
+  // two rates, since a team might have played more home games than away so far)
+  ratings.forEach(r => {
+    const hg = r.home_games || 0, ag = r.away_games || 0;
+    const totalGames = hg + ag;
+    r.xg_for_combined = totalGames
+      ? ((r.xg_for_home || 0) * hg + (r.xg_for_away || 0) * ag) / totalGames
+      : null;
+    r.xg_against_combined = totalGames
+      ? ((r.xg_against_home || 0) * hg + (r.xg_against_away || 0) * ag) / totalGames
+      : null;
+  });
+
   const cols = [
     { key: "name", label: "Team", num: false },
+    { key: "xg_for_combined", label: "xGF (Combined)", num: true },
+    { key: "xg_against_combined", label: "xGA (Combined)", num: true },
     { key: "xg_for_home", label: "xGF (Home)", num: true },
     { key: "xg_against_home", label: "xGA (Home)", num: true },
     { key: "home_attack_rating", label: "Atk (H)", num: true },
@@ -545,6 +561,8 @@ function buildXgTable(ratings) {
   const rows = ratings.slice().sort((a, b) => a.name.localeCompare(b.name));
   const tbody = `<tbody>${rows.map(r => `<tr>
     <td class="name">${r.name}</td>
+    <td class="num">${r.xg_for_combined != null ? r.xg_for_combined.toFixed(2) : "—"}</td>
+    <td class="num">${r.xg_against_combined != null ? r.xg_against_combined.toFixed(2) : "—"}</td>
     <td class="num">${r.xg_for_home != null ? r.xg_for_home.toFixed(2) : "—"}</td>
     <td class="num">${r.xg_against_home != null ? r.xg_against_home.toFixed(2) : "—"}</td>
     <td class="num">${r.home_attack_rating ?? "—"}</td>
