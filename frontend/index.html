@@ -4,6 +4,15 @@
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 <title>Pitch Ledger — Premier League Stats</title>
+
+<!-- Add to Home Screen support -->
+<link rel="manifest" href="/manifest.json" />
+<meta name="theme-color" content="#37003c" />
+<link rel="icon" href="/icon-192.png" />
+<link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+<meta name="apple-mobile-web-app-capable" content="yes" />
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+<meta name="apple-mobile-web-app-title" content="Pitch Ledger" />
 <style>
   :root{
     --fpl-purple:#37003c;
@@ -146,7 +155,7 @@
   .ticker-row{display:flex;align-items:center;gap:.5rem;padding:.5rem 0;border-bottom:1px solid var(--line);}
   .ticker-row .team{width:190px;flex-shrink:0;font-weight:600;font-size:.85rem;display:flex;align-items:center;}
   .ticker-row .fixtures{display:flex;gap:.3rem;flex-wrap:wrap;}
-  .chip{width:64px;padding:.3rem 0;text-align:center;border-radius:6px;font-family:"Helvetica Neue",Arial,sans-serif;
+  .chip{width:78px;padding:.3rem 0;text-align:center;border-radius:6px;font-family:"Helvetica Neue",Arial,sans-serif;
     font-size:.68rem;color:#fff;line-height:1.25;}
   .chip .opp{display:block;font-weight:700;font-size:.72rem;}
   .chip .venue{opacity:.85;font-size:.6rem;}
@@ -397,13 +406,15 @@ function nextFixturesForTeam(teamId, fixtures, ratingsByTeam, n = 5) {
       const oppId = isHome ? f.team_a : f.team_h;
       const opp = ratingsByTeam[oppId];
       if (!opp) return null;
-      // opponent's rating AT THAT VENUE (opponent is away if we're home, and vice versa)
+      // opponent's rating/raw-xG AT THAT VENUE (opponent is away if we're home, and vice versa)
       const atkDiff = isHome ? opp.away_defense_rating : opp.home_defense_rating;
       const defDiff = isHome ? opp.away_attack_rating : opp.home_attack_rating;
+      const atkXg = isHome ? opp.xg_against_away : opp.xg_against_home; // opponent's xG CONCEDED - relevant when judging your attacker
+      const defXg = isHome ? opp.xg_for_away : opp.xg_for_home;         // opponent's xG SCORED - relevant when judging your defender/GK
       const winPct = isHome ? f.home_win_pct : f.away_win_pct;
       return {
         type: "pl", gw: f.gameweek, opp: opp.short_name, venue: isHome ? "H" : "A",
-        atkDiff, defDiff, winPct, bttsPct: f.btts_yes_pct,
+        atkDiff, defDiff, atkXg, defXg, winPct, bttsPct: f.btts_yes_pct,
       };
     })
     .filter(Boolean);
@@ -467,11 +478,15 @@ async function loadFixtureTicker() {
           </div>`;
         }
         const diff = f[diffKey];
+        const xgKey = diffKey.replace("Diff", "Xg"); // atkDiff -> atkXg, defDiff -> defXg
+        const xgVal = f[xgKey];
+        const xgLabel = diffKey === "atkDiff" ? "xGC" : "xG"; // attacking ticker cares about opponent's xG conceded; defensive ticker cares about opponent's xG scored
         const color = diff ? RATING_COLOR[diff] : "var(--mid)";
         const odds = oddsLine(f);
         return `<div class="chip" style="background:${color}">
           <span class="opp">${f.opp}</span>
           <span class="venue">${f.venue} · GW${f.gw}</span>
+          ${xgVal != null ? `<span class="odds">${xgLabel} ${xgVal.toFixed(2)}</span>` : ""}
           ${odds ? `<span class="odds">${odds}</span>` : ""}
         </div>`;
       }).join("");

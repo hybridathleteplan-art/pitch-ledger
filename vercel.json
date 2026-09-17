@@ -1,10 +1,18 @@
 {
   "builds": [
     { "src": "api/index.py", "use": "@vercel/python" },
-    { "src": "index.html", "use": "@vercel/static" }
+    { "src": "index.html", "use": "@vercel/static" },
+    { "src": "manifest.json", "use": "@vercel/static" },
+    { "src": "icon-192.png", "use": "@vercel/static" },
+    { "src": "icon-512.png", "use": "@vercel/static" },
+    { "src": "apple-touch-icon.png", "use": "@vercel/static" }
   ],
   "routes": [
     { "src": "/api/(.*)", "dest": "api/index.py" },
+    { "src": "/manifest.json", "dest": "manifest.json" },
+    { "src": "/icon-192.png", "dest": "icon-192.png" },
+    { "src": "/icon-512.png", "dest": "icon-512.png" },
+    { "src": "/apple-touch-icon.png", "dest": "apple-touch-icon.png" },
     { "src": "/", "dest": "index.html" }
   ]
 }
