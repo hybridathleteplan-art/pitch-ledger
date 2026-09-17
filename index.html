@@ -210,6 +210,9 @@
       <option value="MID">Midfielders</option>
       <option value="FWD">Forwards</option>
     </select>
+    <select id="team-filter">
+      <option value="">All teams</option>
+    </select>
     <select id="ticker-sort" style="display:none;">
       <option value="best">Best run first</option>
       <option value="worst">Worst run first</option>
@@ -251,8 +254,8 @@ const PLAYER_COLUMNS = [
   { key: "assists", label: "A", type: "num" },
   { key: "xg", label: "xG", type: "num", decimals: 2 },
   { key: "xa", label: "xA", type: "num", decimals: 2 },
-  { key: "shots_on_target", label: "SoT", type: "num" },
-  { key: "touches_opp_box", label: "Touches (opp box)", type: "num" },
+  { key: "shots_on_target", label: "SoT", type: "num", comingSoon: true },
+  { key: "touches_opp_box", label: "Touches (opp box)", type: "num", comingSoon: true },
   { key: "defcon_per_game", label: "DefCon/game", type: "num", decimals: 1 },
   { key: "bonus_per_game", label: "Bonus/game", type: "num", decimals: 1 },
   { key: "cs_per_game", label: "CS/game", type: "num", decimals: 2 },
@@ -281,6 +284,7 @@ let state = {
   sort: "goals",
   order: "desc",
   position: "",
+  team_id: "",
   search: "",
   rows: [],
 };
@@ -288,6 +292,7 @@ let state = {
 async function fetchPlayers() {
   const params = new URLSearchParams({ sort: state.sort, order: state.order, limit: 300 });
   if (state.position) params.set("position", state.position);
+  if (state.team_id) params.set("team_id", state.team_id);
   const res = await fetch(`${API_BASE}/api/players?${params}`);
   return res.json();
 }
@@ -349,6 +354,7 @@ function render() {
   ).join("")}</tr></thead>`;
 
   const tbody = `<tbody>${rows.map(r => `<tr>${cols.map(c => {
+    if (c.comingSoon) return `<td class="num" style="color:var(--mid);font-style:italic;font-size:.76rem;">Coming soon</td>`;
     if (c.key === "name") return `<td class="name">${r[c.key] ?? "—"}</td>`;
     if (c.key === "team_short" || (c.key === "name" && state.view === "teams")) return `<td class="team">${r[c.key] ?? "—"}</td>`;
     if (c.key === "position") return `<td><span class="pos-badge">${r[c.key] ?? "—"}</span></td>`;
@@ -558,6 +564,7 @@ document.getElementById("view-toggle").addEventListener("click", (e) => {
   btn.classList.add("active");
   state.view = btn.dataset.view;
   document.getElementById("position-filter").style.display = state.view === "players" ? "" : "none";
+  document.getElementById("team-filter").style.display = state.view === "players" ? "" : "none";
   document.getElementById("ticker-sort").style.display = state.view === "fixtures" ? "" : "none";
   document.getElementById("ticker-count").style.display = state.view === "fixtures" ? "" : "none";
   if (state.view === "players") { state.sort = "goals"; loadPlayers(); }
@@ -577,6 +584,25 @@ document.getElementById("position-filter").addEventListener("change", (e) => {
   state.position = e.target.value;
   if (state.view === "players") loadPlayers();
 });
+
+document.getElementById("team-filter").addEventListener("change", (e) => {
+  state.team_id = e.target.value;
+  if (state.view === "players") loadPlayers();
+});
+
+async function populateTeamFilter() {
+  const teams = await fetchTeams();
+  const select = document.getElementById("team-filter");
+  teams
+    .slice()
+    .sort((a, b) => a.name.localeCompare(b.name))
+    .forEach(t => {
+      const opt = document.createElement("option");
+      opt.value = t.team_id;
+      opt.textContent = t.name;
+      select.appendChild(opt);
+    });
+}
 
 document.getElementById("search").addEventListener("input", (e) => {
   state.search = e.target.value;
@@ -603,6 +629,7 @@ document.getElementById("refresh-btn").addEventListener("click", async () => {
 });
 
 fetchHealth();
+populateTeamFilter();
 loadPlayers();
 </script>
 </body>
