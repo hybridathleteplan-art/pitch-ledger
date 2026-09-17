@@ -34,8 +34,13 @@ jobs:
       - name: Run FBref scraper (best-effort - don't fail the job if FBref blocks/changes layout)
         run: cd backend && python fbref_scraper.py || echo "FBref scrape failed, continuing with FPL data only"
 
-      - name: Load cup/European fixtures (from cup_fixtures.py, whatever's checked in)
+      - name: Load cup/European fixtures (manual, from cup_fixtures.py, whatever's checked in)
         run: cd backend && python load_cup_fixtures.py
+
+      - name: Run Champions League + FA Cup + Carabao Cup scraper (UCL needs FOOTBALL_DATA_API_KEY secret, skips gracefully if not set; FA Cup/Carabao Cup need no key)
+        env:
+          FOOTBALL_DATA_API_KEY: ${{ secrets.FOOTBALL_DATA_API_KEY }}
+        run: cd backend && python cup_fixtures_scraper.py || echo "Cup scrape failed, continuing without it"
 
       - name: Run odds scraper (needs ODDS_API_KEY secret - skips gracefully if not set)
         env:
