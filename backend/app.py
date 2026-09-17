@@ -4,7 +4,10 @@ Thin read API over epl.db, served to the frontend.
 Run:  uvicorn app:app --reload --port 8000
 Then open frontend/index.html (it calls http://localhost:8000 by default).
 """
-from fastapi import FastAPI, Query
+import os
+
+import requests
+from fastapi import FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
 
 from database import get_conn, init_db
@@ -27,6 +30,50 @@ def health():
     with get_conn() as conn:
         gw = conn.execute("SELECT value FROM meta WHERE key='current_gameweek'").fetchone()
     return {"status": "ok", "current_gameweek": gw["value"] if gw else None}
+
+
+@app.post("/api/admin/refresh")
+def trigger_refresh():
+    """
+    Manually kicks off the same GitHub Actions workflow that runs on the
+    weekly schedule (.github/workflows/update-data.yml). This does NOT
+    scrape or update the live site directly - Vercel's filesystem is
+    read-only at request time (see README), so this just asks GitHub to
+    run the pipeline, which then commits a fresh epl.db and triggers a
+    normal redeploy. Expect a few minutes before new data shows up, not
+    an instant refresh.
+
+    Needs two environment variables set in Vercel (Project Settings ->
+    Environment Variables), NOT committed to the repo:
+      GITHUB_TOKEN - a fine-grained personal access token scoped to this
+        repo only, with "Actions: write" permission
+      GITHUB_REPO  - "yourusername/pitch-ledger"
+    """
+    token = os.environ.get("GITHUB_TOKEN")
+    repo = os.environ.get("GITHUB_REPO")
+    if not token or not repo:
+        raise HTTPException(
+            status_code=500,
+            detail="Refresh isn't set up yet - GITHUB_TOKEN and GITHUB_REPO "
+                   "need to be added as environment variables in Vercel.",
+        )
+
+    resp = requests.post(
+        f"https://api.github.com/repos/{repo}/actions/workflows/update-data.yml/dispatches",
+        headers={
+            "Authorization": f"Bearer {token}",
+            "Accept": "application/vnd.github+json",
+        },
+        json={"ref": "main"},
+        timeout=15,
+    )
+    if resp.status_code != 204:
+        raise HTTPException(
+            status_code=502,
+            detail=f"GitHub declined the request (status {resp.status_code}) - "
+                   f"check the token has Actions write access and hasn't expired.",
+        )
+    return {"status": "triggered"}
 
 
 @app.get("/api/teams")
@@ -173,7 +220,7 @@ def list_players(
         "ict_index", "price", "name", "points_per_game", "clean_sheets",
         "bonus", "defensive_contribution", "games_played",
         "min_per_game", "defcon_per_game", "bonus_per_game", "cs_per_game",
-        "pts_per_game_home", "pts_per_game_away",
+        "pts_per_game_home", "pts_per_game_away", "total_points",
     }
     if sort not in allowed_sort:
         sort = "goals"

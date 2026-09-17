@@ -6,14 +6,15 @@
 <title>Pitch Ledger — Premier League Stats</title>
 <style>
   :root{
-    --grass:#1b4332;
-    --grass-deep:#0f2a1e;
-    --chalk:#f6f5f0;
-    --ink:#12201a;
-    --line:#d8d3c4;
-    --gold:#c8a24a;
-    --mid:#5c6b62;
-    --r1:#2f7d4f; --r2:#7aa653; --r3:#d8c24a; --r4:#d17a3a; --r5:#b23b3b;
+    --fpl-purple:#37003c;
+    --fpl-purple-deep:#240029;
+    --fpl-green:#00ff87;
+    --fpl-green-deep:#00c96b;
+    --chalk:#f4f2f6;
+    --ink:#20122a;
+    --line:#e4dde8;
+    --mid:#6b5f75;
+    --r1:#37b34a; --r2:#8fce4f; --r3:#f0c93a; --r4:#e8792f; --r5:#c92f3a;
   }
   *{box-sizing:border-box;}
   body{
@@ -23,33 +24,34 @@
     font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
   }
   header{
-    background:linear-gradient(180deg,var(--grass) 0%,var(--grass-deep) 100%);
-    color:var(--chalk);
+    background:linear-gradient(135deg,var(--fpl-purple) 0%,var(--fpl-purple-deep) 100%);
+    color:#fff;
     padding:2.2rem 1.5rem 1.6rem;
-    border-bottom:4px solid var(--gold);
+    border-bottom:4px solid var(--fpl-green);
   }
   header h1{
     margin:0;
     font-size:clamp(1.6rem,4vw,2.4rem);
-    font-weight:600;
+    font-weight:800;
     letter-spacing:0.01em;
   }
   header p{
     margin:.4rem 0 0;
     font-family:"Helvetica Neue",Arial,sans-serif;
     font-size:.85rem;
-    color:#cfe3d8;
+    color:#d9c3de;
   }
   #gw-badge{
     display:inline-block;
     margin-top:.9rem;
     font-family:"Helvetica Neue",Arial,sans-serif;
     font-size:.72rem;
+    font-weight:700;
     letter-spacing:.04em;
-    background:rgba(255,255,255,.08);
-    border:1px solid rgba(255,255,255,.25);
+    background:var(--fpl-green);
+    color:var(--fpl-purple-deep);
     padding:.3rem .7rem;
-    border-radius:3px;
+    border-radius:999px;
   }
 
   main{max-width:1100px;margin:0 auto;padding:1.6rem 1.5rem 4rem;}
@@ -67,37 +69,40 @@
     font-size:.85rem;
     padding:.45rem .6rem;
     border:1px solid var(--line);
-    border-radius:3px;
+    border-radius:6px;
     background:#fff;
     color:var(--ink);
   }
   .controls input{flex:1;min-width:160px;}
-  .toggle-group{display:flex;border:1px solid var(--grass);border-radius:3px;overflow:hidden;}
+  .toggle-group{display:flex;border:1px solid var(--fpl-purple);border-radius:6px;overflow:hidden;}
   .toggle-group button{
     font-family:inherit;
     font-size:.85rem;
+    font-weight:600;
     background:#fff;
     border:none;
     padding:.45rem .9rem;
     cursor:pointer;
-    color:var(--grass-deep);
+    color:var(--fpl-purple);
   }
-  .toggle-group button.active{background:var(--grass);color:#fff;}
+  .toggle-group button.active{background:var(--fpl-green);color:var(--fpl-purple-deep);}
 
-  table{width:100%;border-collapse:collapse;font-size:.88rem;}
+  table{width:100%;border-collapse:collapse;font-size:.88rem;background:#fff;border-radius:8px;overflow:hidden;}
   thead th{
     text-align:left;
     font-family:"Helvetica Neue",Arial,sans-serif;
-    font-weight:600;
+    font-weight:700;
     font-size:.7rem;
     letter-spacing:.03em;
-    color:var(--mid);
-    border-bottom:2px solid var(--grass);
-    padding:.5rem .55rem;
+    text-transform:uppercase;
+    color:#fff;
+    background:var(--fpl-purple);
+    border-bottom:2px solid var(--fpl-green);
+    padding:.6rem .55rem;
     cursor:pointer;
     white-space:nowrap;
   }
-  thead th.sorted{color:var(--grass-deep);}
+  thead th.sorted{color:var(--fpl-green);}
   thead th.sorted::after{content:" ▾";font-size:.65em;}
   thead th.num{text-align:right;}
   tbody td{
@@ -105,17 +110,18 @@
     border-bottom:1px solid var(--line);
     white-space:nowrap;
   }
-  tbody tr:hover{background:#eee9db;}
+  tbody tr:hover{background:#f7effa;}
   td.name{font-weight:600;}
   td.team{color:var(--mid);font-family:"Helvetica Neue",Arial,sans-serif;font-size:.78rem;}
   td.num{text-align:right;font-variant-numeric:tabular-nums;}
   .pos-badge{
     font-family:"Helvetica Neue",Arial,sans-serif;
-    font-size:.65rem;
-    padding:.12rem .4rem;
-    border-radius:2px;
-    background:#e4ddc7;
-    color:var(--grass-deep);
+    font-weight:700;
+    font-size:.62rem;
+    padding:.15rem .5rem;
+    border-radius:999px;
+    background:var(--fpl-green);
+    color:var(--fpl-purple-deep);
   }
 
   .empty, .loading{
@@ -138,17 +144,35 @@
   .legend .swatch{width:16px;height:16px;border-radius:3px;display:inline-block;}
   .ticker-sub{font-family:"Helvetica Neue",Arial,sans-serif;font-size:.74rem;color:var(--mid);margin:-.5rem 0 .9rem;}
   .ticker-row{display:flex;align-items:center;gap:.5rem;padding:.5rem 0;border-bottom:1px solid var(--line);}
-  .ticker-row .team{width:150px;flex-shrink:0;font-weight:600;font-size:.85rem;}
+  .ticker-row .team{width:190px;flex-shrink:0;font-weight:600;font-size:.85rem;display:flex;align-items:center;}
   .ticker-row .fixtures{display:flex;gap:.3rem;flex-wrap:wrap;}
-  .chip{width:64px;padding:.3rem 0;text-align:center;border-radius:3px;font-family:"Helvetica Neue",Arial,sans-serif;
+  .chip{width:64px;padding:.3rem 0;text-align:center;border-radius:6px;font-family:"Helvetica Neue",Arial,sans-serif;
     font-size:.68rem;color:#fff;line-height:1.25;}
   .chip .opp{display:block;font-weight:700;font-size:.72rem;}
   .chip .venue{opacity:.85;font-size:.6rem;}
   .chip .odds{display:block;opacity:.9;font-size:.58rem;margin-top:.1rem;}
-  .chip.cup{background:#8a8d87;}
+  .chip.cup{background:#8a8d97;}
   .chip.cup .comp{display:block;font-size:.58rem;opacity:.9;text-transform:uppercase;letter-spacing:.02em;}
-  .ticker-heading{font-size:1rem;font-weight:600;margin:1.6rem 0 .3rem;}
+  .ticker-heading{font-size:1rem;font-weight:700;margin:1.6rem 0 .3rem;color:var(--fpl-purple);}
   .ticker-heading:first-child{margin-top:0;}
+  .refresh-btn{
+    font-family:"Helvetica Neue",Arial,sans-serif;
+    font-size:.78rem;
+    font-weight:700;
+    background:var(--fpl-green);
+    color:var(--fpl-purple-deep);
+    border:none;
+    border-radius:6px;
+    padding:.45rem .9rem;
+    cursor:pointer;
+  }
+  .refresh-btn:disabled{opacity:.6;cursor:default;}
+  .refresh-status{
+    font-family:"Helvetica Neue",Arial,sans-serif;
+    font-size:.72rem;
+    color:var(--mid);
+    margin-left:.5rem;
+  }
 </style>
 </head>
 <body>
@@ -157,6 +181,10 @@
   <h1>Pitch Ledger</h1>
   <p>Premier League player &amp; team data, current season</p>
   <span id="gw-badge">Loading gameweek…</span>
+  <div style="margin-top:.8rem;">
+    <button class="refresh-btn" id="refresh-btn">Refresh data</button>
+    <span class="refresh-status" id="refresh-status"></span>
+  </div>
 </header>
 
 <main>
@@ -219,6 +247,7 @@ const PLAYER_COLUMNS = [
   { key: "defcon_per_game", label: "DefCon/game", type: "num", decimals: 1 },
   { key: "bonus_per_game", label: "Bonus/game", type: "num", decimals: 1 },
   { key: "cs_per_game", label: "CS/game", type: "num", decimals: 2 },
+  { key: "total_points", label: "Total Pts", type: "num" },
   { key: "points_per_game", label: "Pts/game", type: "num", decimals: 1 },
   { key: "pts_per_game_home", label: "Pts (H)", type: "num", decimals: 1 },
   { key: "pts_per_game_away", label: "Pts (A)", type: "num", decimals: 1 },
@@ -422,9 +451,12 @@ async function loadFixtureTicker() {
     else if (sortMode === "worst") teamsToRender.sort((a, b) => b.avg - a.avg);
     else teamsToRender.sort((a, b) => a.r.name.localeCompare(b.r.name));
 
-    return teamsToRender.map(({ r, fx }) => {
+    return teamsToRender.map(({ r, fx, avg }) => {
+      const avgBadge = avg < 99
+        ? `<span style="font-family:'Helvetica Neue',Arial,sans-serif;font-size:.68rem;font-weight:700;color:#fff;background:${RATING_COLOR[Math.round(avg)] || 'var(--mid)'};padding:.1rem .4rem;border-radius:999px;margin-left:.4rem;">avg ${avg.toFixed(1)}</span>`
+        : "";
       if (!fx.length) {
-        return `<div class="ticker-row"><div class="team">${r.name}</div><div class="fixtures" style="color:var(--mid);font-family:'Helvetica Neue',Arial,sans-serif;font-size:.78rem;">No upcoming fixtures loaded</div></div>`;
+        return `<div class="ticker-row"><div class="team">${r.name}${avgBadge}</div><div class="fixtures" style="color:var(--mid);font-family:'Helvetica Neue',Arial,sans-serif;font-size:.78rem;">No upcoming fixtures loaded</div></div>`;
       }
       const chips = fx.map(f => {
         if (f.type === "cup") {
@@ -443,7 +475,7 @@ async function loadFixtureTicker() {
           ${odds ? `<span class="odds">${odds}</span>` : ""}
         </div>`;
       }).join("");
-      return `<div class="ticker-row"><div class="team">${r.name}</div><div class="fixtures">${chips}</div></div>`;
+      return `<div class="ticker-row"><div class="team">${r.name}${avgBadge}</div><div class="fixtures">${chips}</div></div>`;
     }).join("");
   }
 
@@ -470,7 +502,38 @@ async function loadFixtureTicker() {
     <div class="ticker-heading">Defensive fixture ticker</div>
     <div class="ticker-sub">Difficulty = strength of the opponent's xG at that venue. Green = blunt attack, good clean-sheet odds.</div>
     <div>${buildTicker("defDiff")}</div>
+    <div class="ticker-heading">Raw xG data (verify the ticker against this)</div>
+    <div class="ticker-sub">The actual xGF/xGA per game behind each rating above - if a chip's color looks wrong, check the number here first.</div>
+    ${buildXgTable(ratings)}
   `;
+}
+
+function buildXgTable(ratings) {
+  const cols = [
+    { key: "name", label: "Team", num: false },
+    { key: "xg_for_home", label: "xGF (Home)", num: true },
+    { key: "xg_against_home", label: "xGA (Home)", num: true },
+    { key: "home_attack_rating", label: "Atk (H)", num: true },
+    { key: "home_defense_rating", label: "Def (H)", num: true },
+    { key: "xg_for_away", label: "xGF (Away)", num: true },
+    { key: "xg_against_away", label: "xGA (Away)", num: true },
+    { key: "away_attack_rating", label: "Atk (A)", num: true },
+    { key: "away_defense_rating", label: "Def (A)", num: true },
+  ];
+  const thead = `<thead><tr>${cols.map(c => `<th class="${c.num ? 'num' : ''}">${c.label}</th>`).join("")}</tr></thead>`;
+  const rows = ratings.slice().sort((a, b) => a.name.localeCompare(b.name));
+  const tbody = `<tbody>${rows.map(r => `<tr>
+    <td class="name">${r.name}</td>
+    <td class="num">${r.xg_for_home != null ? r.xg_for_home.toFixed(2) : "—"}</td>
+    <td class="num">${r.xg_against_home != null ? r.xg_against_home.toFixed(2) : "—"}</td>
+    <td class="num">${r.home_attack_rating ?? "—"}</td>
+    <td class="num">${r.home_defense_rating ?? "—"}</td>
+    <td class="num">${r.xg_for_away != null ? r.xg_for_away.toFixed(2) : "—"}</td>
+    <td class="num">${r.xg_against_away != null ? r.xg_against_away.toFixed(2) : "—"}</td>
+    <td class="num">${r.away_attack_rating ?? "—"}</td>
+    <td class="num">${r.away_defense_rating ?? "—"}</td>
+  </tr>`).join("")}</tbody>`;
+  return `<table>${thead}${tbody}</table>`;
 }
 
 document.getElementById("view-toggle").addEventListener("click", (e) => {
@@ -503,6 +566,25 @@ document.getElementById("position-filter").addEventListener("change", (e) => {
 document.getElementById("search").addEventListener("input", (e) => {
   state.search = e.target.value;
   render();
+});
+
+document.getElementById("refresh-btn").addEventListener("click", async () => {
+  const btn = document.getElementById("refresh-btn");
+  const status = document.getElementById("refresh-status");
+  btn.disabled = true;
+  status.textContent = "Triggering refresh…";
+  try {
+    const res = await fetch(`${API_BASE}/api/admin/refresh`, { method: "POST" });
+    const data = await res.json();
+    if (res.ok) {
+      status.textContent = "Refresh started - takes a few minutes, then the page will auto-update on reload.";
+    } else {
+      status.textContent = data.detail || "Couldn't trigger refresh - check GITHUB_TOKEN is set.";
+    }
+  } catch (e) {
+    status.textContent = "Refresh request failed - check your connection.";
+  }
+  btn.disabled = false;
 });
 
 fetchHealth();
