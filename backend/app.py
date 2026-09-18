@@ -267,7 +267,7 @@ def list_players(
         "touches_opp_box", "progressive_carries", "progressive_passes",
         "ict_index", "price", "name", "points_per_game", "clean_sheets",
         "bonus", "defensive_contribution", "games_played",
-        "min_per_game", "defcon_per_game", "bonus_per_game", "cs_per_game",
+        "min_per_game", "defcon_per_90", "bonus_per_90", "cs_per_game",
         "pts_per_game_home", "pts_per_game_away", "total_points",
     }
     if sort not in allowed_sort:
@@ -281,8 +281,8 @@ def list_players(
         SELECT p.*, t.name AS team_name, t.short_name AS team_short,
             COALESCE(gw.games_played, 0) AS games_played,
             COALESCE(gw.min_per_game, 0) AS min_per_game,
-            COALESCE(gw.defcon_per_game, 0) AS defcon_per_game,
-            COALESCE(gw.bonus_per_game, 0) AS bonus_per_game,
+            COALESCE(gw.defcon_per_90, 0) AS defcon_per_90,
+            COALESCE(gw.bonus_per_90, 0) AS bonus_per_90,
             COALESCE(gw.cs_per_game, 0) AS cs_per_game,
             gwh.pts_per_game_home,
             gwa.pts_per_game_away
@@ -292,8 +292,11 @@ def list_players(
             SELECT player_id,
                    COUNT(*) AS games_played,
                    AVG(minutes) AS min_per_game,
-                   AVG(defensive_contribution) AS defcon_per_game,
-                   AVG(bonus) AS bonus_per_game,
+                   -- true per-90 rate: total stat / (total minutes / 90), not
+                   -- an average across games - matters for players who come
+                   -- on as subs, where "per game" and "per 90" diverge a lot
+                   CASE WHEN SUM(minutes) > 0 THEN SUM(defensive_contribution) * 90.0 / SUM(minutes) ELSE 0 END AS defcon_per_90,
+                   CASE WHEN SUM(minutes) > 0 THEN SUM(bonus) * 90.0 / SUM(minutes) ELSE 0 END AS bonus_per_90,
                    AVG(clean_sheet) AS cs_per_game
             FROM player_gameweeks WHERE minutes > 0 GROUP BY player_id
         ) gw ON gw.player_id = p.player_id

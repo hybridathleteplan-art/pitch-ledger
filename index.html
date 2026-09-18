@@ -101,13 +101,13 @@
     text-align:left;
     font-family:"Helvetica Neue",Arial,sans-serif;
     font-weight:700;
-    font-size:.7rem;
-    letter-spacing:.03em;
+    font-size:.64rem;
+    letter-spacing:.02em;
     text-transform:uppercase;
     color:#fff;
     background:var(--fpl-purple);
     border-bottom:2px solid var(--fpl-green);
-    padding:.6rem .55rem;
+    padding:.4rem .4rem;
     cursor:pointer;
     white-space:nowrap;
   }
@@ -115,7 +115,7 @@
   thead th.sorted::after{content:" ▾";font-size:.65em;}
   thead th.num{text-align:right;}
   tbody td{
-    padding:.55rem;
+    padding:.4rem .4rem;
     border-bottom:1px solid var(--line);
     white-space:nowrap;
   }
@@ -274,16 +274,16 @@ const PLAYER_COLUMNS = [
   { key: "name", label: "Player", type: "text" },
   { key: "team_short", label: "Team", type: "text" },
   { key: "position", label: "Pos", type: "text" },
-  { key: "min_per_game", label: "Min/game", type: "num" },
+  { key: "min_per_game", label: "Min/G", type: "num" },
   { key: "goals", label: "G", type: "num" },
   { key: "assists", label: "A", type: "num" },
   { key: "xg", label: "xG", type: "num", decimals: 2 },
   { key: "xa", label: "xA", type: "num", decimals: 2 },
-  { key: "defcon_per_game", label: "DefCon/game", type: "num", decimals: 1 },
-  { key: "bonus_per_game", label: "Bonus/game", type: "num", decimals: 1 },
-  { key: "cs_per_game", label: "CS/game", type: "num", decimals: 2 },
-  { key: "total_points", label: "Total Pts", type: "num" },
-  { key: "points_per_game", label: "Pts/game", type: "num", decimals: 1 },
+  { key: "defcon_per_90", label: "DCon/90", type: "num", decimals: 1 },
+  { key: "bonus_per_90", label: "Bonus/90", type: "num", decimals: 1 },
+  { key: "cs_per_game", label: "CS/G", type: "num", decimals: 2 },
+  { key: "total_points", label: "Total", type: "num" },
+  { key: "points_per_game", label: "Pts/G", type: "num", decimals: 1 },
   { key: "pts_per_game_home", label: "Pts (H)", type: "num", decimals: 1 },
   { key: "pts_per_game_away", label: "Pts (A)", type: "num", decimals: 1 },
   { key: "ict_index", label: "ICT", type: "num", decimals: 1 },
@@ -418,8 +418,8 @@ async function loadPlayers() {
 
 async function loadTeams() {
   document.getElementById("table-wrap").innerHTML = `<div class="loading">Loading…</div>`;
-  state.rows = await fetchTeams();
-  render();
+  const [standings, ratings] = await Promise.all([fetchTeams(), fetchXgRatings()]);
+  document.getElementById("table-wrap").innerHTML = buildTeamsTable(standings, ratings);
 }
 
 async function fetchCupFixtures() {
@@ -485,10 +485,15 @@ function nextFixturesForTeam(teamId, fixtures, ratingsByTeam, n = 5) {
       const defDiff = isHome ? opp.away_attack_rating : opp.home_attack_rating;
       const atkXg = isHome ? opp.xg_against_away : opp.xg_against_home; // opponent's xG CONCEDED - relevant when judging your attacker
       const defXg = isHome ? opp.xg_for_away : opp.xg_for_home;         // opponent's xG SCORED - relevant when judging your defender/GK
+      // red card gameweeks that may be distorting the SPECIFIC number this chip shows -
+      // the opponent's own red card (inflates their xG-against, relevant on the attacking ticker)
+      // or a red card by whoever the opponent played (inflates the opponent's xG-for, relevant on the defensive ticker)
+      const atkRedGws = (isHome ? opp.away_against_red_card_gws : opp.home_against_red_card_gws) || [];
+      const defRedGws = (isHome ? opp.away_for_red_card_gws : opp.home_for_red_card_gws) || [];
       const winPct = isHome ? f.home_win_pct : f.away_win_pct;
       return {
         type: "pl", gw: f.gameweek, opp: opp.short_name, venue: isHome ? "H" : "A",
-        atkDiff, defDiff, atkXg, defXg, winPct, bttsPct: f.btts_yes_pct,
+        atkDiff, defDiff, atkXg, defXg, atkRedGws, defRedGws, winPct, bttsPct: f.btts_yes_pct,
       };
     })
     .filter(Boolean);
@@ -556,10 +561,14 @@ async function loadFixtureTicker() {
         const xgKey = diffKey.replace("Diff", "Xg"); // atkDiff -> atkXg, defDiff -> defXg
         const xgVal = f[xgKey];
         const xgLabel = diffKey === "atkDiff" ? "xGC" : "xG"; // attacking ticker cares about opponent's xG conceded; defensive ticker cares about opponent's xG scored
+        const redGws = diffKey === "atkDiff" ? f.atkRedGws : f.defRedGws;
+        const redFlag = redGws && redGws.length
+          ? `<span title="Red card in GW${redGws.join(', GW')} may be distorting this number" style="cursor:help;">⚠</span> `
+          : "";
         const color = diff ? RATING_COLOR[diff] : "var(--mid)";
         const odds = oddsLine(f);
         return `<div class="chip" style="background:${color}">
-          <span class="opp">${f.opp}</span>
+          <span class="opp">${redFlag}${f.opp}</span>
           <span class="venue">${f.venue} · GW${f.gw}</span>
           ${xgVal != null ? `<span class="odds">${xgLabel} ${xgVal.toFixed(2)}</span>` : ""}
           ${odds ? `<span class="odds">${odds}</span>` : ""}
@@ -593,17 +602,31 @@ async function loadFixtureTicker() {
     <div class="ticker-heading">Defensive fixture ticker</div>
     <div class="ticker-sub">Difficulty = strength of the opponent's xG at that venue. Green = blunt attack, good clean-sheet odds.</div>
     <div>${buildTicker("defDiff")}</div>
-    <div class="ticker-heading">Raw xG data (verify the ticker against this)</div>
-    <div class="ticker-sub">The actual xGF/xGA per game behind each rating above - if a chip's color looks wrong, check the number here first.</div>
-    ${buildXgTable(ratings)}
+    <div class="ticker-sub" style="margin-top:1rem;">⚠ on a chip = a red card may be distorting that number. Full breakdown with raw xG figures is on the <strong>Teams</strong> tab.</div>
   `;
 }
 
-function buildXgTable(ratings) {
-  // combined = weighted average across home+away games, weighted by how many
+function buildRedCardNotes(r) {
+  const notes = [];
+  if (r.home_against_red_card_gws && r.home_against_red_card_gws.length)
+    notes.push(`Own red card GW${r.home_against_red_card_gws.join(", GW")} (home) - xGA (H) may be inflated`);
+  if (r.away_against_red_card_gws && r.away_against_red_card_gws.length)
+    notes.push(`Own red card GW${r.away_against_red_card_gws.join(", GW")} (away) - xGA (A) may be inflated`);
+  if (r.home_for_red_card_gws && r.home_for_red_card_gws.length)
+    notes.push(`Opponent red card GW${r.home_for_red_card_gws.join(", GW")} (home) - xGF (H) may be inflated`);
+  if (r.away_for_red_card_gws && r.away_for_red_card_gws.length)
+    notes.push(`Opponent red card GW${r.away_for_red_card_gws.join(", GW")} (away) - xGF (A) may be inflated`);
+  return notes;
+}
+
+function buildTeamsTable(standings, ratings) {
+  const ratingsByTeam = Object.fromEntries(ratings.map(r => [r.team_id, r]));
+  const merged = standings.map(s => ({ ...s, ...(ratingsByTeam[s.team_id] || {}) }));
+
+  // (H+A) = weighted average across home+away games, weighted by how many
   // games were actually played at each venue (not just a flat average of the
   // two rates, since a team might have played more home games than away so far)
-  ratings.forEach(r => {
+  merged.forEach(r => {
     const hg = r.home_games || 0, ag = r.away_games || 0;
     const totalGames = hg + ag;
     r.xg_for_combined = totalGames
@@ -616,41 +639,38 @@ function buildXgTable(ratings) {
 
   const cols = [
     { key: "name", label: "Team", num: false },
-    { key: "xg_for_combined", label: "xGF (Combined)", num: true },
-    { key: "xg_against_combined", label: "xGA (Combined)", num: true },
-    { key: "xg_for_home", label: "xGF (Home)", num: true },
-    { key: "xg_against_home", label: "xGA (Home)", num: true },
+    { key: "played", label: "P", num: true },
+    { key: "wins", label: "W", num: true },
+    { key: "draws", label: "D", num: true },
+    { key: "losses", label: "L", num: true },
+    { key: "points", label: "Pts", num: true },
+    { key: "xg_for_combined", label: "xGF (H+A)", num: true },
+    { key: "xg_against_combined", label: "xGA (H+A)", num: true },
+    { key: "xg_for_home", label: "xGF (H)", num: true },
+    { key: "xg_against_home", label: "xGA (H)", num: true },
     { key: "home_attack_rating", label: "Atk (H)", num: true },
     { key: "home_defense_rating", label: "Def (H)", num: true },
-    { key: "xg_for_away", label: "xGF (Away)", num: true },
-    { key: "xg_against_away", label: "xGA (Away)", num: true },
+    { key: "xg_for_away", label: "xGF (A)", num: true },
+    { key: "xg_against_away", label: "xGA (A)", num: true },
     { key: "away_attack_rating", label: "Atk (A)", num: true },
     { key: "away_defense_rating", label: "Def (A)", num: true },
     { key: "notes", label: "Notes", num: false },
   ];
   const thead = `<thead><tr>${cols.map(c => `<th class="${c.num ? 'num' : ''}">${c.label}</th>`).join("")}</tr></thead>`;
-  const rows = ratings.slice().sort((a, b) => a.name.localeCompare(b.name));
-
-  function buildNotes(r) {
-    const notes = [];
-    if (r.home_against_red_card_gws && r.home_against_red_card_gws.length)
-      notes.push(`Own red card GW${r.home_against_red_card_gws.join(", GW")} (home) - xGA (Home) may be inflated`);
-    if (r.away_against_red_card_gws && r.away_against_red_card_gws.length)
-      notes.push(`Own red card GW${r.away_against_red_card_gws.join(", GW")} (away) - xGA (Away) may be inflated`);
-    if (r.home_for_red_card_gws && r.home_for_red_card_gws.length)
-      notes.push(`Opponent red card GW${r.home_for_red_card_gws.join(", GW")} (home) - xGF (Home) may be inflated`);
-    if (r.away_for_red_card_gws && r.away_for_red_card_gws.length)
-      notes.push(`Opponent red card GW${r.away_for_red_card_gws.join(", GW")} (away) - xGF (Away) may be inflated`);
-    return notes;
-  }
+  const rows = merged.slice().sort((a, b) => a.name.localeCompare(b.name));
 
   const tbody = `<tbody>${rows.map(r => {
-    const notes = buildNotes(r);
+    const notes = buildRedCardNotes(r);
     const notesHtml = notes.length
       ? notes.map(n => `<div style="font-size:.7rem;color:var(--r5);">⚠ ${n}</div>`).join("")
       : `<span style="color:var(--mid);font-size:.75rem;">—</span>`;
     return `<tr>
     <td class="name">${r.name}</td>
+    <td class="num">${r.played ?? "—"}</td>
+    <td class="num">${r.wins ?? "—"}</td>
+    <td class="num">${r.draws ?? "—"}</td>
+    <td class="num">${r.losses ?? "—"}</td>
+    <td class="num">${r.points ?? "—"}</td>
     <td class="num">${r.xg_for_combined != null ? r.xg_for_combined.toFixed(2) : "—"}</td>
     <td class="num">${r.xg_against_combined != null ? r.xg_against_combined.toFixed(2) : "—"}</td>
     <td class="num">${r.xg_for_home != null ? r.xg_for_home.toFixed(2) : "—"}</td>
@@ -680,6 +700,7 @@ document.getElementById("table-wrap").addEventListener("click", (e) => {
   document.getElementById("position-filter").style.display = "none";
   document.getElementById("ticker-sort").style.display = "none";
   document.getElementById("ticker-count-wrap").style.display = "none";
+  document.getElementById("search").style.display = "none";
   loadResults();
 });
 
@@ -693,6 +714,7 @@ document.getElementById("view-toggle").addEventListener("click", (e) => {
   document.getElementById("team-filter").style.display = (state.view === "players" || state.view === "results") ? "" : "none";
   document.getElementById("ticker-sort").style.display = state.view === "fixtures" ? "" : "none";
   document.getElementById("ticker-count-wrap").style.display = state.view === "fixtures" ? "inline-flex" : "none";
+  document.getElementById("search").style.display = state.view === "players" ? "" : "none";
   if (state.view === "players") { state.sort = "goals"; loadPlayers(); }
   else if (state.view === "teams") { state.sort = "points"; loadTeams(); }
   else if (state.view === "results") { loadResults(); }
