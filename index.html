@@ -168,6 +168,16 @@
     margin:-.4rem 0 .8rem;font-style:italic;}
 
   #table-wrap{overflow-x:auto; -webkit-overflow-scrolling:touch;}
+  #table-wrap table th:first-child,
+  #table-wrap table td:first-child{
+    position:sticky;
+    left:0;
+    z-index:2;
+    box-shadow:2px 0 4px rgba(0,0,0,.08);
+  }
+  #table-wrap table thead th:first-child{background:var(--fpl-purple); z-index:3;}
+  #table-wrap table tbody td:first-child{background:#fff;}
+  #table-wrap table tbody tr:hover td:first-child{background:#f7effa;}
 
   @media (max-width: 480px) {
     .ticker-row{flex-direction:column;align-items:flex-start;gap:.3rem;}
@@ -562,16 +572,17 @@ async function loadFixtureTicker() {
         const xgVal = f[xgKey];
         const xgLabel = diffKey === "atkDiff" ? "xGC" : "xG"; // attacking ticker cares about opponent's xG conceded; defensive ticker cares about opponent's xG scored
         const redGws = diffKey === "atkDiff" ? f.atkRedGws : f.defRedGws;
-        const redFlag = redGws && redGws.length
-          ? `<span title="Red card in GW${redGws.join(', GW')} may be distorting this number" style="cursor:help;">⚠</span> `
+        const redNote = redGws && redGws.length
+          ? `<span class="odds" style="color:#2b0000;background:#ffe08a;border-radius:3px;padding:0 .2rem;display:inline-block;margin-top:.1rem;">⚠ RC GW${redGws.join(",")}</span>`
           : "";
         const color = diff ? RATING_COLOR[diff] : "var(--mid)";
         const odds = oddsLine(f);
         return `<div class="chip" style="background:${color}">
-          <span class="opp">${redFlag}${f.opp}</span>
+          <span class="opp">${f.opp}</span>
           <span class="venue">${f.venue} · GW${f.gw}</span>
           ${xgVal != null ? `<span class="odds">${xgLabel} ${xgVal.toFixed(2)}</span>` : ""}
           ${odds ? `<span class="odds">${odds}</span>` : ""}
+          ${redNote}
         </div>`;
       }).join("");
       return `<div class="ticker-row"><div class="team">${teamLink}${avgBadge}</div><div class="fixtures">${chips}</div></div>`;
