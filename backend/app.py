@@ -159,6 +159,54 @@ def list_teams():
     return [dict(r) for r in rows]
 
 
+@app.get("/api/results")
+def list_results(team_id: int | None = None, limit: int = 200):
+    """
+    Finished fixtures with real scores, team names joined in, and (when
+    team_id is given) the result from that team's perspective - W/D/L and
+    which venue they played at. Most recent first.
+    """
+    query = """
+        SELECT f.fixture_id, f.gameweek, f.kickoff_time,
+               f.team_h, th.name AS team_h_name, th.short_name AS team_h_short,
+               f.team_a, ta.name AS team_a_name, ta.short_name AS team_a_short,
+               f.team_h_score, f.team_a_score
+        FROM fixtures f
+        JOIN teams th ON th.team_id = f.team_h
+        JOIN teams ta ON ta.team_id = f.team_a
+        WHERE f.finished = 1
+    """
+    params: list = []
+    if team_id is not None:
+        query += " AND (f.team_h = ? OR f.team_a = ?)"
+        params.extend([team_id, team_id])
+    query += " ORDER BY f.gameweek DESC LIMIT ?"
+    params.append(limit)
+
+    with get_conn() as conn:
+        rows = [dict(r) for r in conn.execute(query, params).fetchall()]
+
+    for r in rows:
+        if team_id is None:
+            continue
+        is_home = r["team_h"] == team_id
+        own_score = r["team_h_score"] if is_home else r["team_a_score"]
+        opp_score = r["team_a_score"] if is_home else r["team_h_score"]
+        r["venue"] = "H" if is_home else "A"
+        r["opponent_name"] = r["team_a_name"] if is_home else r["team_h_name"]
+        r["own_score"] = own_score
+        r["opponent_score"] = opp_score
+        if own_score is None or opp_score is None:
+            r["result"] = None
+        elif own_score > opp_score:
+            r["result"] = "W"
+        elif own_score < opp_score:
+            r["result"] = "L"
+        else:
+            r["result"] = "D"
+    return rows
+
+
 @app.get("/api/fixtures")
 def list_fixtures(team_id: int | None = None, upcoming_only: bool = True, limit: int = 200):
     query = """

@@ -135,15 +135,15 @@ def upsert_gameweek_history(conn, player_id, fpl_id, history):
         conn.execute(
             """INSERT INTO player_gameweeks
                  (player_id, gameweek, was_home, opponent_team_id, minutes, goals, assists, xg, xa,
-                  shots, shots_on_target, bonus, defensive_contribution, clean_sheet, points)
-               VALUES ((SELECT player_id FROM players WHERE fpl_id=?), ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                  shots, shots_on_target, bonus, defensive_contribution, clean_sheet, red_cards, points)
+               VALUES ((SELECT player_id FROM players WHERE fpl_id=?), ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                ON CONFLICT(player_id, gameweek) DO UPDATE SET
                  was_home=excluded.was_home, opponent_team_id=excluded.opponent_team_id,
                  minutes=excluded.minutes, goals=excluded.goals,
                  assists=excluded.assists, xg=excluded.xg, xa=excluded.xa,
                  shots=excluded.shots, shots_on_target=excluded.shots_on_target,
                  bonus=excluded.bonus, defensive_contribution=excluded.defensive_contribution,
-                 clean_sheet=excluded.clean_sheet, points=excluded.points""",
+                 clean_sheet=excluded.clean_sheet, red_cards=excluded.red_cards, points=excluded.points""",
             (
                 fpl_id,
                 gw["round"],
@@ -159,6 +159,7 @@ def upsert_gameweek_history(conn, player_id, fpl_id, history):
                 gw.get("bonus", 0) or 0,
                 gw.get("defensive_contribution", 0) or 0,
                 1 if gw.get("clean_sheets") else 0,
+                gw.get("red_cards", 0) or 0,
                 gw.get("total_points", 0),
             ),
         )

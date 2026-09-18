@@ -164,6 +164,27 @@
   .chip.cup .comp{display:block;font-size:.58rem;opacity:.9;text-transform:uppercase;letter-spacing:.02em;}
   .ticker-heading{font-size:1rem;font-weight:700;margin:1.6rem 0 .3rem;color:var(--fpl-purple);}
   .ticker-heading:first-child{margin-top:0;}
+  .avg-badge-explainer{font-family:"Helvetica Neue",Arial,sans-serif;font-size:.7rem;color:var(--mid);
+    margin:-.4rem 0 .8rem;font-style:italic;}
+
+  #table-wrap{overflow-x:auto; -webkit-overflow-scrolling:touch;}
+
+  @media (max-width: 480px) {
+    .ticker-row{flex-direction:column;align-items:flex-start;gap:.3rem;}
+    .ticker-row .team{width:100%;font-size:.78rem;margin-bottom:.1rem;}
+    .chip{width:56px;padding:.2rem 0;}
+    .chip .opp{font-size:.64rem;}
+    .chip .venue{font-size:.52rem;}
+    .chip .odds{font-size:.5rem;}
+    .chip.cup .comp{font-size:.5rem;}
+    .legend{font-size:.66rem;gap:.5rem;}
+    .legend .swatch{width:12px;height:12px;}
+    main{padding:1rem .6rem 3rem;}
+    table{font-size:.72rem;}
+    thead th{padding:.4rem .35rem;font-size:.6rem;}
+    tbody td{padding:.4rem .35rem;}
+    .pos-badge{font-size:.56rem;padding:.1rem .35rem;}
+  }
   .refresh-btn{
     font-family:"Helvetica Neue",Arial,sans-serif;
     font-size:.78rem;
@@ -202,6 +223,7 @@
       <button data-view="players" class="active">Players</button>
       <button data-view="teams">Teams</button>
       <button data-view="fixtures">Fixtures</button>
+      <button data-view="results">Results</button>
     </div>
     <select id="position-filter">
       <option value="">All positions</option>
@@ -218,12 +240,13 @@
       <option value="worst">Worst run first</option>
       <option value="az">Team name A–Z</option>
     </select>
-    <select id="ticker-count" style="display:none;">
-      <option value="5">Next 5 fixtures</option>
-      <option value="10">Next 10</option>
-      <option value="15">Next 15</option>
-      <option value="all">All remaining</option>
-    </select>
+    <span id="ticker-count-wrap" style="display:none; align-items:center; gap:.4rem; font-family:'Helvetica Neue',Arial,sans-serif; font-size:.82rem; color:var(--mid);">
+      <label for="ticker-count">Show next</label>
+      <input id="ticker-count" type="number" min="1" value="5" style="width:56px; padding:.4rem .4rem; border:1px solid var(--line); border-radius:6px;" />
+      <label for="ticker-count-all" style="display:flex; align-items:center; gap:.25rem;">
+        <input id="ticker-count-all" type="checkbox" /> all remaining
+      </label>
+    </span>
     <input id="search" type="text" placeholder="Search player or team…" />
   </div>
 
@@ -233,7 +256,9 @@
 </main>
 
 <footer>
-  Data: official FPL API (goals, assists, xG, xA, minutes) + FBref (touches in box, progressive actions).
+  Data: official FPL API (goals, assists, xG, xA, minutes, points). Shots on target and touches in
+  box aren't shown - no free source for either exists that isn't blocked (FBref) or disallows bots
+  by policy (Understat).
   Refreshed after each gameweek.
 </footer>
 
@@ -254,8 +279,6 @@ const PLAYER_COLUMNS = [
   { key: "assists", label: "A", type: "num" },
   { key: "xg", label: "xG", type: "num", decimals: 2 },
   { key: "xa", label: "xA", type: "num", decimals: 2 },
-  { key: "shots_on_target", label: "SoT", type: "num", comingSoon: true },
-  { key: "touches_opp_box", label: "Touches (opp box)", type: "num", comingSoon: true },
   { key: "defcon_per_game", label: "DefCon/game", type: "num", decimals: 1 },
   { key: "bonus_per_game", label: "Bonus/game", type: "num", decimals: 1 },
   { key: "cs_per_game", label: "CS/game", type: "num", decimals: 2 },
@@ -326,7 +349,10 @@ async function fetchHealth() {
 
 function fmt(val, col) {
   if (val === null || val === undefined) return "—";
-  if (col.type === "num" && col.decimals) return Number(val).toFixed(col.decimals);
+  if (col.type === "num") {
+    const decimals = col.decimals ?? (Number.isInteger(val) ? 0 : 1);
+    return Number(val).toFixed(decimals);
+  }
   return val;
 }
 
@@ -401,6 +427,48 @@ async function fetchCupFixtures() {
   return res.json();
 }
 
+async function fetchResults(teamId) {
+  const params = new URLSearchParams({ limit: 300 });
+  if (teamId) params.set("team_id", teamId);
+  const res = await fetch(`${API_BASE}/api/results?${params}`);
+  return res.json();
+}
+
+async function loadResults() {
+  document.getElementById("table-wrap").innerHTML = `<div class="loading">Loading…</div>`;
+  const results = await fetchResults(state.team_id);
+
+  if (!results.length) {
+    document.getElementById("table-wrap").innerHTML =
+      `<div class="empty">No finished results yet${state.team_id ? " for this team" : ""}. They'll show up here once gameweeks are played and fpl_scraper.py has run.</div>`;
+    return;
+  }
+
+  const isFiltered = !!state.team_id;
+  const thead = isFiltered
+    ? `<thead><tr><th>GW</th><th>Venue</th><th>Opponent</th><th class="num">Score</th><th>Result</th></tr></thead>`
+    : `<thead><tr><th>GW</th><th>Home</th><th class="num">Score</th><th>Away</th></tr></thead>`;
+
+  const RESULT_COLOR = { W: "var(--r1)", D: "var(--r3)", L: "var(--r5)" };
+
+  const tbody = isFiltered
+    ? `<tbody>${results.map(r => `<tr>
+        <td>${r.gameweek}</td>
+        <td>${r.venue}</td>
+        <td class="name">${r.opponent_name}</td>
+        <td class="num">${r.own_score}–${r.opponent_score}</td>
+        <td><span style="display:inline-block;width:22px;height:22px;line-height:22px;text-align:center;border-radius:4px;color:#fff;font-weight:700;font-family:'Helvetica Neue',Arial,sans-serif;font-size:.75rem;background:${RESULT_COLOR[r.result] || 'var(--mid)'};">${r.result ?? "—"}</span></td>
+      </tr>`).join("")}</tbody>`
+    : `<tbody>${results.map(r => `<tr>
+        <td>${r.gameweek}</td>
+        <td class="name">${r.team_h_name}</td>
+        <td class="num">${r.team_h_score}–${r.team_a_score}</td>
+        <td class="name">${r.team_a_name}</td>
+      </tr>`).join("")}</tbody>`;
+
+  document.getElementById("table-wrap").innerHTML = `<table>${thead}${tbody}</table>`;
+}
+
 const RATING_COLOR = {1:"var(--r1)",2:"var(--r2)",3:"var(--r3)",4:"var(--r4)",5:"var(--r5)"};
 
 function nextFixturesForTeam(teamId, fixtures, ratingsByTeam, n = 5) {
@@ -447,8 +515,8 @@ async function loadFixtureTicker() {
   const [ratings, fixtures, cupFixtures] = await Promise.all([fetchXgRatings(), fetchFixtures(), fetchCupFixtures()]);
   const ratingsByTeam = Object.fromEntries(ratings.map(r => [r.team_id, r]));
   const sortMode = document.getElementById("ticker-sort").value;
-  const countValue = document.getElementById("ticker-count").value;
-  const fixtureCount = countValue === "all" ? Infinity : parseInt(countValue, 10);
+  const showAll = document.getElementById("ticker-count-all").checked;
+  const fixtureCount = showAll ? Infinity : Math.max(1, parseInt(document.getElementById("ticker-count").value, 10) || 5);
 
   function buildTicker(diffKey) {
     let teamsToRender = ratings.map(r => {
@@ -470,10 +538,11 @@ async function loadFixtureTicker() {
 
     return teamsToRender.map(({ r, fx, avg }) => {
       const avgBadge = avg < 99
-        ? `<span style="font-family:'Helvetica Neue',Arial,sans-serif;font-size:.68rem;font-weight:700;color:#fff;background:${RATING_COLOR[Math.round(avg)] || 'var(--mid)'};padding:.1rem .4rem;border-radius:999px;margin-left:.4rem;">avg ${avg.toFixed(1)}</span>`
+        ? `<span title="Average difficulty (1=easiest, 5=hardest) across the fixtures shown for this team, same color scale as the chips" style="font-family:'Helvetica Neue',Arial,sans-serif;font-size:.68rem;font-weight:700;color:#fff;background:${RATING_COLOR[Math.round(avg)] || 'var(--mid)'};padding:.1rem .4rem;border-radius:999px;margin-left:.4rem;cursor:help;">avg ${avg.toFixed(1)}</span>`
         : "";
+      const teamLink = `<span class="team-link" data-team-id="${r.team_id}" style="cursor:pointer;text-decoration:underline;text-decoration-style:dotted;" title="View ${r.name}'s results">${r.name}</span>`;
       if (!fx.length) {
-        return `<div class="ticker-row"><div class="team">${r.name}${avgBadge}</div><div class="fixtures" style="color:var(--mid);font-family:'Helvetica Neue',Arial,sans-serif;font-size:.78rem;">No upcoming fixtures loaded</div></div>`;
+        return `<div class="ticker-row"><div class="team">${teamLink}${avgBadge}</div><div class="fixtures" style="color:var(--mid);font-family:'Helvetica Neue',Arial,sans-serif;font-size:.78rem;">No upcoming fixtures loaded</div></div>`;
       }
       const chips = fx.map(f => {
         if (f.type === "cup") {
@@ -496,7 +565,7 @@ async function loadFixtureTicker() {
           ${odds ? `<span class="odds">${odds}</span>` : ""}
         </div>`;
       }).join("");
-      return `<div class="ticker-row"><div class="team">${r.name}${avgBadge}</div><div class="fixtures">${chips}</div></div>`;
+      return `<div class="ticker-row"><div class="team">${teamLink}${avgBadge}</div><div class="fixtures">${chips}</div></div>`;
     }).join("");
   }
 
@@ -517,6 +586,7 @@ async function loadFixtureTicker() {
       <span class="scale"><span class="swatch" style="background:var(--r5)"></span>5 · Hardest</span>
       <span class="scale"><span class="swatch" style="background:#8a8d87"></span>Cup / European (unrated, shown so midweek fatigue is visible)</span>
     </div>
+    <div class="avg-badge-explainer">The "avg" pill next to each team name is the average difficulty (1-5) across the fixtures shown for that team, on the same color scale as the chips - a quick way to see who has the easiest/hardest run without reading every chip.</div>
     <div class="ticker-heading">Attacking fixture ticker</div>
     <div class="ticker-sub">Difficulty = strength of the opponent's xG-conceded at that venue. Green = leaky defense, good for your attackers. W/CS/BTTS % come from bookmaker odds where available.</div>
     <div>${buildTicker("atkDiff")}</div>
@@ -556,10 +626,30 @@ function buildXgTable(ratings) {
     { key: "xg_against_away", label: "xGA (Away)", num: true },
     { key: "away_attack_rating", label: "Atk (A)", num: true },
     { key: "away_defense_rating", label: "Def (A)", num: true },
+    { key: "notes", label: "Notes", num: false },
   ];
   const thead = `<thead><tr>${cols.map(c => `<th class="${c.num ? 'num' : ''}">${c.label}</th>`).join("")}</tr></thead>`;
   const rows = ratings.slice().sort((a, b) => a.name.localeCompare(b.name));
-  const tbody = `<tbody>${rows.map(r => `<tr>
+
+  function buildNotes(r) {
+    const notes = [];
+    if (r.home_against_red_card_gws && r.home_against_red_card_gws.length)
+      notes.push(`Own red card GW${r.home_against_red_card_gws.join(", GW")} (home) - xGA (Home) may be inflated`);
+    if (r.away_against_red_card_gws && r.away_against_red_card_gws.length)
+      notes.push(`Own red card GW${r.away_against_red_card_gws.join(", GW")} (away) - xGA (Away) may be inflated`);
+    if (r.home_for_red_card_gws && r.home_for_red_card_gws.length)
+      notes.push(`Opponent red card GW${r.home_for_red_card_gws.join(", GW")} (home) - xGF (Home) may be inflated`);
+    if (r.away_for_red_card_gws && r.away_for_red_card_gws.length)
+      notes.push(`Opponent red card GW${r.away_for_red_card_gws.join(", GW")} (away) - xGF (Away) may be inflated`);
+    return notes;
+  }
+
+  const tbody = `<tbody>${rows.map(r => {
+    const notes = buildNotes(r);
+    const notesHtml = notes.length
+      ? notes.map(n => `<div style="font-size:.7rem;color:var(--r5);">⚠ ${n}</div>`).join("")
+      : `<span style="color:var(--mid);font-size:.75rem;">—</span>`;
+    return `<tr>
     <td class="name">${r.name}</td>
     <td class="num">${r.xg_for_combined != null ? r.xg_for_combined.toFixed(2) : "—"}</td>
     <td class="num">${r.xg_against_combined != null ? r.xg_against_combined.toFixed(2) : "—"}</td>
@@ -571,9 +661,27 @@ function buildXgTable(ratings) {
     <td class="num">${r.xg_against_away != null ? r.xg_against_away.toFixed(2) : "—"}</td>
     <td class="num">${r.away_attack_rating ?? "—"}</td>
     <td class="num">${r.away_defense_rating ?? "—"}</td>
-  </tr>`).join("")}</tbody>`;
+    <td>${notesHtml}</td>
+  </tr>`;
+  }).join("")}</tbody>`;
   return `<table>${thead}${tbody}</table>`;
 }
+
+document.getElementById("table-wrap").addEventListener("click", (e) => {
+  const link = e.target.closest(".team-link");
+  if (!link) return;
+  const teamId = link.dataset.teamId;
+  document.querySelectorAll("#view-toggle button").forEach(b => b.classList.remove("active"));
+  document.querySelector('#view-toggle button[data-view="results"]').classList.add("active");
+  state.view = "results";
+  state.team_id = teamId;
+  document.getElementById("team-filter").value = teamId;
+  document.getElementById("team-filter").style.display = "";
+  document.getElementById("position-filter").style.display = "none";
+  document.getElementById("ticker-sort").style.display = "none";
+  document.getElementById("ticker-count-wrap").style.display = "none";
+  loadResults();
+});
 
 document.getElementById("view-toggle").addEventListener("click", (e) => {
   const btn = e.target.closest("button");
@@ -582,11 +690,12 @@ document.getElementById("view-toggle").addEventListener("click", (e) => {
   btn.classList.add("active");
   state.view = btn.dataset.view;
   document.getElementById("position-filter").style.display = state.view === "players" ? "" : "none";
-  document.getElementById("team-filter").style.display = state.view === "players" ? "" : "none";
+  document.getElementById("team-filter").style.display = (state.view === "players" || state.view === "results") ? "" : "none";
   document.getElementById("ticker-sort").style.display = state.view === "fixtures" ? "" : "none";
-  document.getElementById("ticker-count").style.display = state.view === "fixtures" ? "" : "none";
+  document.getElementById("ticker-count-wrap").style.display = state.view === "fixtures" ? "inline-flex" : "none";
   if (state.view === "players") { state.sort = "goals"; loadPlayers(); }
   else if (state.view === "teams") { state.sort = "points"; loadTeams(); }
+  else if (state.view === "results") { loadResults(); }
   else loadFixtureTicker();
 });
 
@@ -594,7 +703,12 @@ document.getElementById("ticker-sort").addEventListener("change", () => {
   if (state.view === "fixtures") loadFixtureTicker();
 });
 
-document.getElementById("ticker-count").addEventListener("change", () => {
+document.getElementById("ticker-count").addEventListener("input", () => {
+  if (state.view === "fixtures") loadFixtureTicker();
+});
+
+document.getElementById("ticker-count-all").addEventListener("change", (e) => {
+  document.getElementById("ticker-count").disabled = e.target.checked;
   if (state.view === "fixtures") loadFixtureTicker();
 });
 
@@ -606,6 +720,7 @@ document.getElementById("position-filter").addEventListener("change", (e) => {
 document.getElementById("team-filter").addEventListener("change", (e) => {
   state.team_id = e.target.value;
   if (state.view === "players") loadPlayers();
+  else if (state.view === "results") loadResults();
 });
 
 async function populateTeamFilter() {

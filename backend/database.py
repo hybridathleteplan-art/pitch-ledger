@@ -80,6 +80,7 @@ CREATE TABLE IF NOT EXISTS player_gameweeks (
     bonus INTEGER DEFAULT 0,
     defensive_contribution INTEGER DEFAULT 0,
     clean_sheet INTEGER DEFAULT 0,
+    red_cards INTEGER DEFAULT 0,
     points INTEGER DEFAULT 0,
     UNIQUE(player_id, gameweek),
     FOREIGN KEY (player_id) REFERENCES players(player_id)
@@ -106,6 +107,7 @@ CREATE TABLE IF NOT EXISTS other_fixtures (
     is_home INTEGER,
     match_date TEXT,           -- ISO date, used to slot it into the ticker near the right PL gameweek
     near_gameweek INTEGER,     -- which PL gameweek this midweek fixture falls closest to/before
+    source TEXT DEFAULT 'manual', -- 'manual' (cup_fixtures.py) or 'football-data.org' (cup_fixtures_scraper.py) - each loader only touches its own rows
     FOREIGN KEY (team_id) REFERENCES teams(team_id)
 );
 
@@ -139,9 +141,36 @@ def get_conn():
         conn.close()
 
 
+# Columns added to the schema after a table already existed in the wild need
+# an explicit migration entry here, or older database files will crash with
+# "no such column" the first time new code reads/writes it - SQLite (unlike
+# some other databases) never grows a table's columns on its own just
+# because CREATE TABLE IF NOT EXISTS ran again with a longer definition.
+#
+# IMPORTANT: whenever a new column is added to a table in SCHEMA above that
+# already ships in the wild, add a matching line here too (table, column
+# name, full "ADD COLUMN" type/default clause). New databases get the
+# column for free from CREATE TABLE; this list is what makes EXISTING
+# database files catch up automatically the next time the app starts -
+# nobody should ever need to run a manual ALTER TABLE again.
+MIGRATIONS = [
+    ("player_gameweeks", "red_cards", "INTEGER DEFAULT 0"),
+    ("other_fixtures", "source", "TEXT DEFAULT 'manual'"),
+]
+
+
+def run_migrations(conn):
+    for table, column, add_clause in MIGRATIONS:
+        existing_cols = {row["name"] for row in conn.execute(f"PRAGMA table_info({table})").fetchall()}
+        if column not in existing_cols:
+            conn.execute(f"ALTER TABLE {table} ADD COLUMN {column} {add_clause}")
+            print(f"[migration] added {table}.{column}")
+
+
 def init_db():
     with get_conn() as conn:
         conn.executescript(SCHEMA)
+        run_migrations(conn)
 
 
 if __name__ == "__main__":
