@@ -662,14 +662,16 @@ function buildTeamsTable(standings, ratings) {
     { key: "draws", label: "D", num: true },
     { key: "losses", label: "L", num: true },
     { key: "points", label: "Pts", num: true },
-    { key: "xg_for_combined", label: "xGF (H+A)", num: true },
-    { key: "xg_against_combined", label: "xGA (H+A)", num: true },
-    { key: "xg_for_home", label: "xGF (H)", num: true },
-    { key: "xg_against_home", label: "xGA (H)", num: true },
+    { key: "goals_for", label: "GF", num: true },
+    { key: "goals_against", label: "GA", num: true },
+    { key: "xg_for_combined", label: "xGF/g (H+A)", num: true },
+    { key: "xg_against_combined", label: "xGA/g (H+A)", num: true },
+    { key: "xg_for_home", label: "xGF/g (H)", num: true },
+    { key: "xg_against_home", label: "xGA/g (H)", num: true },
     { key: "home_attack_rating", label: "Atk (H)", num: true },
     { key: "home_defense_rating", label: "Def (H)", num: true },
-    { key: "xg_for_away", label: "xGF (A)", num: true },
-    { key: "xg_against_away", label: "xGA (A)", num: true },
+    { key: "xg_for_away", label: "xGF/g (A)", num: true },
+    { key: "xg_against_away", label: "xGA/g (A)", num: true },
     { key: "away_attack_rating", label: "Atk (A)", num: true },
     { key: "away_defense_rating", label: "Def (A)", num: true },
     { key: "notes", label: "Notes", num: false },
@@ -689,6 +691,8 @@ function buildTeamsTable(standings, ratings) {
     <td class="num">${r.draws ?? "—"}</td>
     <td class="num">${r.losses ?? "—"}</td>
     <td class="num">${r.points ?? "—"}</td>
+    <td class="num">${r.goals_for ?? "—"}</td>
+    <td class="num">${r.goals_against ?? "—"}</td>
     <td class="num">${r.xg_for_combined != null ? r.xg_for_combined.toFixed(2) : "—"}</td>
     <td class="num">${r.xg_against_combined != null ? r.xg_against_combined.toFixed(2) : "—"}</td>
     <td class="num">${r.xg_for_home != null ? r.xg_for_home.toFixed(2) : "—"}</td>
