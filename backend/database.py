@@ -160,17 +160,38 @@ MIGRATIONS = [
 
 
 def run_migrations(conn):
+    """
+    Adds any missing columns. Wrapped in try/except per-column on purpose:
+    on a read-only filesystem (Vercel's Python functions at request time),
+    ALTER TABLE fails with "attempt to write a readonly database" - unlike
+    CREATE TABLE IF NOT EXISTS above, which is a safe no-op when the table
+    already exists and never attempts a real write. If that happens, we log
+    it and move on rather than crash the entire app: the fix at that point
+    is to run the migration somewhere with real write access (locally, or
+    via GitHub Actions) and commit the updated epl.db, not to keep retrying
+    on every request.
+    """
     for table, column, add_clause in MIGRATIONS:
-        existing_cols = {row["name"] for row in conn.execute(f"PRAGMA table_info({table})").fetchall()}
-        if column not in existing_cols:
-            conn.execute(f"ALTER TABLE {table} ADD COLUMN {column} {add_clause}")
-            print(f"[migration] added {table}.{column}")
+        try:
+            existing_cols = {row["name"] for row in conn.execute(f"PRAGMA table_info({table})").fetchall()}
+            if column not in existing_cols:
+                conn.execute(f"ALTER TABLE {table} ADD COLUMN {column} {add_clause}")
+                print(f"[migration] added {table}.{column}")
+        except sqlite3.OperationalError as e:
+            print(f"[migration] skipped {table}.{column} (likely a read-only filesystem): {e}")
 
 
 def init_db():
-    with get_conn() as conn:
-        conn.executescript(SCHEMA)
-        run_migrations(conn)
+    try:
+        with get_conn() as conn:
+            conn.executescript(SCHEMA)
+            run_migrations(conn)
+    except sqlite3.OperationalError as e:
+        # Same read-only-filesystem concern as above, belt-and-braces: if
+        # even CREATE TABLE IF NOT EXISTS somehow fails (e.g. a brand new
+        # empty file on a read-only mount, which genuinely can't be
+        # created), don't take the whole app down over it.
+        print(f"[init_db] schema setup skipped (likely a read-only filesystem): {e}")
 
 
 if __name__ == "__main__":
