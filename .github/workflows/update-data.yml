@@ -1,8 +1,7 @@
-name: Update EPL data
+﻿name: Update EPL data
 
 on:
   schedule:
-    # every 3 hours - only commits if FPL data actually changed
     - cron: "0 */3 * * *"
   workflow_dispatch: {}
 
