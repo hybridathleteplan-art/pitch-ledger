@@ -174,10 +174,11 @@
     left:0;
     z-index:2;
     box-shadow:2px 0 4px rgba(0,0,0,.08);
-    max-width:100px;
-    overflow:hidden;
-    text-overflow:ellipsis;
-    white-space:nowrap;
+    min-width:112px;
+    max-width:112px;
+    white-space:normal;
+    word-break:normal;
+    line-height:1.15;
   }
   #table-wrap table thead th:first-child{background:var(--fpl-purple); z-index:3;}
   #table-wrap table tbody td:first-child{background:#fff;}
@@ -199,7 +200,7 @@
     tbody td{padding:.4rem .35rem;}
     .pos-badge{font-size:.56rem;padding:.1rem .35rem;}
     #table-wrap table th:first-child,
-    #table-wrap table td:first-child{max-width:64px;}
+    #table-wrap table td:first-child{min-width:92px;max-width:92px;}
   }
   .refresh-btn{
     font-family:"Helvetica Neue",Arial,sans-serif;
