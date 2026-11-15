@@ -92,8 +92,9 @@ def upsert_players(conn, elements):
             """INSERT INTO players
                  (fpl_id, name, team_id, position, minutes, goals, assists,
                   xg, xa, ict_index, price, clean_sheets, bonus,
-                  defensive_contribution, points_per_game, total_points, updated_at)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                  defensive_contribution, points_per_game, total_points, updated_at,
+                  chance_of_playing, news, status)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                ON CONFLICT(fpl_id) DO UPDATE SET
                  name=excluded.name, team_id=excluded.team_id,
                  position=excluded.position, minutes=excluded.minutes,
@@ -104,7 +105,9 @@ def upsert_players(conn, elements):
                  defensive_contribution=excluded.defensive_contribution,
                  points_per_game=excluded.points_per_game,
                  total_points=excluded.total_points,
-                 updated_at=excluded.updated_at""",
+                 updated_at=excluded.updated_at,
+                 chance_of_playing=excluded.chance_of_playing,
+                 news=excluded.news, status=excluded.status""",
             (
                 p["id"],
                 f'{p["first_name"]} {p["second_name"]}'.strip(),
@@ -123,6 +126,9 @@ def upsert_players(conn, elements):
                 float(p.get("points_per_game", 0) or 0),
                 p.get("total_points", 0) or 0,
                 now,
+                p.get("chance_of_playing_next_round"),
+                p.get("news") or "",
+                p.get("status") or "a",
             ),
         )
     # Note: FPL's bootstrap-static no longer exposes a per-player "shots_on_target"

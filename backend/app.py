@@ -12,6 +12,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from database import get_conn, init_db
 from ratings import compute_team_xg_ratings
+from predictions import compute_predictions
 
 app = FastAPI(title="EPL Stats API")
 
@@ -23,6 +24,12 @@ app.add_middleware(
 )
 
 init_db()
+
+
+@app.get("/api/predictions")
+def predictions(games: int = Query(10, ge=1, le=10)):
+    """Per-fixture predicted FPL points for the next `games` fixtures per player."""
+    return compute_predictions(games)
 
 
 @app.get("/api/health")

@@ -156,6 +156,9 @@ def get_conn():
 MIGRATIONS = [
     ("player_gameweeks", "red_cards", "INTEGER DEFAULT 0"),
     ("other_fixtures", "source", "TEXT DEFAULT 'manual'"),
+    ("players", "chance_of_playing", "INTEGER"),
+    ("players", "news", "TEXT"),
+    ("players", "status", "TEXT"),
 ]
 
 

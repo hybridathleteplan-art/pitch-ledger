@@ -37,6 +37,13 @@ window) had a red card for either side, so the raw-data table can show
 
 from database import get_conn
 
+# Fixture-difficulty ratings blend two views of each past match:
+#   RAW_WEIGHT      - what the team actually created/conceded (xG)
+#   ADJUSTED_WEIGHT - the same number corrected for the opponent's quality
+# 0.5 / 0.5 = "half what they actually did, half who they did it against".
+RAW_WEIGHT = 0.5
+ADJUSTED_WEIGHT = 0.5
+
 
 def band_attack(xg_per_game: float) -> int:
     if xg_per_game >= 2.5:
@@ -124,6 +131,51 @@ def compute_team_xg_ratings():
     def avg(lst):
         return sum(lst) / len(lst) if lst else None
 
+    # ---- opponent adjustment -------------------------------------------
+    # For every team: how much xG it normally creates (xgf_avg) and
+    # allows (xga_avg) over the whole season, home+away combined.
+    xgf_all, xga_all = {}, {}
+    for r in rows:
+        xgf_all.setdefault(r["team_id"], []).append(r["team_xg"] or 0)
+        opp_xg = by_team_gw.get((r["opponent_team_id"], r["gameweek"]))
+        if opp_xg is not None:
+            xga_all.setdefault(r["team_id"], []).append(opp_xg)
+    xgf_avg = {t: avg(v) for t, v in xgf_all.items()}
+    xga_avg = {t: avg(v) for t, v in xga_all.items()}
+    league_avg = avg([r["team_xg"] or 0 for r in rows]) or 1.0
+
+    # Per match, scale the raw number by how the opponent normally performs:
+    #   attack:  xG scored / what that opponent usually concedes
+    #   defence: xG conceded / what that opponent usually creates
+    # (multiplied back by the league average so it stays on the xG scale.)
+    # Scoring 2.0 xG against a team that normally concedes 2.0 is worth
+    # league-average; conceding 2.5 xG to a team that normally creates 2.5
+    # is also only league-average, not a disaster.
+    adj_samples = {tid: {"H_for": [], "H_against": [], "A_for": [], "A_against": []} for tid in teams}
+    for r in rows:
+        tid, gw, opp_id = r["team_id"], r["gameweek"], r["opponent_team_id"]
+        if tid not in adj_samples:
+            continue
+        venue = "H" if r["was_home"] else "A"
+        team_xg = r["team_xg"] or 0
+        opp_conc = xga_avg.get(opp_id)
+        adj_samples[tid][f"{venue}_for"].append(
+            team_xg * league_avg / opp_conc if opp_conc else team_xg
+        )
+        opp_xg = by_team_gw.get((opp_id, gw))
+        if opp_xg is not None:
+            opp_create = xgf_avg.get(opp_id)
+            adj_samples[tid][f"{venue}_against"].append(
+                opp_xg * league_avg / opp_create if opp_create else opp_xg
+            )
+
+    def blend(raw, adj):
+        if raw is None:
+            return None
+        if adj is None:
+            return raw
+        return RAW_WEIGHT * raw + ADJUSTED_WEIGHT * adj
+
     results = []
     for tid, t in teams.items():
         s = samples.get(tid, {
@@ -132,6 +184,11 @@ def compute_team_xg_ratings():
         })
         h_for, h_against = avg(s["H_for"]), avg(s["H_against"])
         a_for, a_against = avg(s["A_for"]), avg(s["A_against"])
+        adj = adj_samples.get(tid, {"H_for": [], "H_against": [], "A_for": [], "A_against": []})
+        h_for_b = blend(h_for, avg(adj["H_for"]))
+        h_against_b = blend(h_against, avg(adj["H_against"]))
+        a_for_b = blend(a_for, avg(adj["A_for"]))
+        a_against_b = blend(a_against, avg(adj["A_against"]))
         results.append({
             "team_id": tid,
             "name": t["name"],
@@ -142,10 +199,15 @@ def compute_team_xg_ratings():
             "xg_against_home": round(h_against, 2) if h_against is not None else None,
             "xg_for_away": round(a_for, 2) if a_for is not None else None,
             "xg_against_away": round(a_against, 2) if a_against is not None else None,
-            "home_attack_rating": band_attack(h_for) if h_for is not None else None,
-            "home_defense_rating": band_defense(h_against) if h_against is not None else None,
-            "away_attack_rating": band_attack(a_for) if a_for is not None else None,
-            "away_defense_rating": band_defense(a_against) if a_against is not None else None,
+            # blended (70% raw + 30% opponent-adjusted) xG, used for the ratings
+            "xg_for_home_blended": round(h_for_b, 2) if h_for_b is not None else None,
+            "xg_against_home_blended": round(h_against_b, 2) if h_against_b is not None else None,
+            "xg_for_away_blended": round(a_for_b, 2) if a_for_b is not None else None,
+            "xg_against_away_blended": round(a_against_b, 2) if a_against_b is not None else None,
+            "home_attack_rating": band_attack(h_for_b) if h_for_b is not None else None,
+            "home_defense_rating": band_defense(h_against_b) if h_against_b is not None else None,
+            "away_attack_rating": band_attack(a_for_b) if a_for_b is not None else None,
+            "away_defense_rating": band_defense(a_against_b) if a_against_b is not None else None,
             # gameweeks (within the sampled window) where a red card - ours
             # or the opponent's - may be distorting the number above
             "home_for_red_card_gws": s["H_for_red_gws"],

@@ -1,0 +1,272 @@
+"""
+Predicted FPL points for the next N fixtures of every player.
+
+For one player in one fixture the expected points are the sum of:
+
+  appearance   1 pt for playing, 2 for 60+ minutes
+  goals        xG/90 x expected minutes x opponent factor x (6 GK/DEF, 5 MID, 4 FWD)
+  assists      xA/90 x expected minutes x opponent factor x 3
+  clean sheet  P(clean sheet) x P(60+ min) x (4 GK/DEF, 1 MID, 0 FWD)
+  goals conc.  GK/DEF only: -1 per 2 goals conceded, from the same Poisson model
+  defensive    P(reaching the threshold) x P(60+ min) x 2
+  contribution (threshold: 10 for DEF, 12 for MID/FWD; GK cannot earn it)
+  bonus        bonus/90 x expected minutes
+
+Not included yet: goalkeeper saves, yellow cards, own goals, penalties
+missed or saved.
+
+Player rates blend 60% recent form (last 6 team games) and 40% season, then
+are pulled toward the position average while the sample is small.
+
+Opponent strength comes from ratings.compute_team_xg_ratings(), which is
+already 50/50 raw and opponent-adjusted xG split by home/away.
+
+Availability: FPL's chance_of_playing_next_round multiplies the first
+fixture's minutes. The second fixture recovers halfway to full, the third
+onward is full. Players with no flag are treated as fit.
+"""
+import math
+
+from database import get_conn
+from ratings import compute_team_xg_ratings
+
+RECENT_GAMES = 6
+RECENT_WEIGHT = 0.6
+SEASON_WEIGHT = 0.4
+MAX_FIXTURES = 10
+MIN_EXPECTED_MINUTES = 10  # hide players who basically never play
+
+GOAL_PTS = {"GK": 6, "DEF": 6, "MID": 5, "FWD": 4}
+CS_PTS = {"GK": 4, "DEF": 4, "MID": 1, "FWD": 0}
+DEFCON_THRESHOLD = {"DEF": 10, "MID": 12, "FWD": 12}  # GK: not eligible
+DEFCON_PTS = 2
+ASSIST_PTS = 3
+
+RATE_SHRINK_MINUTES = 900   # ~10 full games before a player's own rate dominates
+DEFCON_SHRINK_GAMES = 5
+FIXTURE_SHRINK_GAMES = 4    # venue games of the opponent before its numbers dominate
+
+
+def _blend(recent, season):
+    return RECENT_WEIGHT * recent + SEASON_WEIGHT * season
+
+
+def _poisson_cs_and_conceded_penalty(lam):
+    """P(0 goals) and E[floor(G/2)] for G ~ Poisson(lam)."""
+    p0 = math.exp(-lam)
+    e_pen = 0.0
+    p = p0
+    for g in range(0, 15):
+        if g > 0:
+            p *= lam / g
+        e_pen += (g // 2) * p
+    return p0, e_pen
+
+
+def compute_predictions(max_games=MAX_FIXTURES):
+    max_games = max(1, min(int(max_games), MAX_FIXTURES))
+
+    with get_conn() as conn:
+        players = [dict(r) for r in conn.execute("""
+            SELECT p.*, t.short_name AS team_short, t.name AS team_name
+            FROM players p JOIN teams t ON t.team_id = p.team_id
+        """).fetchall()]
+        teams = {t["team_id"]: dict(t) for t in conn.execute("SELECT * FROM teams").fetchall()}
+        gw_rows = conn.execute("""
+            SELECT player_id, gameweek, minutes, xg, xa, bonus, defensive_contribution
+            FROM player_gameweeks
+        """).fetchall()
+        fixtures = [dict(r) for r in conn.execute("""
+            SELECT fixture_id, gameweek, team_h, team_a, kickoff_time, finished
+            FROM fixtures WHERE gameweek IS NOT NULL
+        """).fetchall()]
+
+    ratings = {r["team_id"]: r for r in compute_team_xg_ratings()}
+
+    # ---- team game calendars -------------------------------------------
+    team_played_gws = {tid: [] for tid in teams}
+    upcoming = {tid: [] for tid in teams}
+    for f in fixtures:
+        if f["finished"]:
+            for tid in (f["team_h"], f["team_a"]):
+                if tid in team_played_gws and f["gameweek"] not in team_played_gws[tid]:
+                    team_played_gws[tid].append(f["gameweek"])
+        else:
+            if f["team_h"] in upcoming:
+                upcoming[f["team_h"]].append((f["gameweek"], f["kickoff_time"] or "", f["team_a"], True))
+            if f["team_a"] in upcoming:
+                upcoming[f["team_a"]].append((f["gameweek"], f["kickoff_time"] or "", f["team_h"], False))
+    for tid in team_played_gws:
+        team_played_gws[tid].sort()
+    for tid in upcoming:
+        upcoming[tid].sort(key=lambda x: (x[0], x[1]))
+
+    # ---- player history ------------------------------------------------
+    hist = {}
+    for r in gw_rows:
+        hist.setdefault(r["player_id"], {})[r["gameweek"]] = r
+
+    # ---- league averages for opponent factors ---------------------------
+    def vals(key):
+        return [r[key] for r in ratings.values() if r.get(key) is not None]
+    conc_vals = vals("xg_against_home_blended") + vals("xg_against_away_blended")
+    for_vals = vals("xg_for_home_blended") + vals("xg_for_away_blended")
+    league_conc = sum(conc_vals) / len(conc_vals) if conc_vals else 1.4
+    league_for = sum(for_vals) / len(for_vals) if for_vals else 1.4
+    league = (league_conc + league_for) / 2
+
+    def team_strength(tid, venue, kind):
+        """Shrunk blended xG for/against for a team at a venue ('H'/'A')."""
+        r = ratings.get(tid)
+        if not r:
+            return league
+        games = r["home_games"] if venue == "H" else r["away_games"]
+        key = ("xg_for_" if kind == "for" else "xg_against_") + ("home" if venue == "H" else "away") + "_blended"
+        v = r.get(key)
+        if v is None:
+            return league
+        k = games / (games + FIXTURE_SHRINK_GAMES)
+        return league + k * (v - league)
+
+    # ---- position priors (per 90 rates, defcon hit rate) -----------------
+    prior = {}
+    for pos in ("GK", "DEF", "MID", "FWD"):
+        mins = xg = xa = bonus = 0.0
+        hit_n = hit_d = 0
+        for p in players:
+            if p["position"] != pos:
+                continue
+            for g in hist.get(p["player_id"], {}).values():
+                m = g["minutes"] or 0
+                if m <= 0:
+                    continue
+                mins += m
+                xg += g["xg"] or 0
+                xa += g["xa"] or 0
+                bonus += g["bonus"] or 0
+                if m >= 60 and pos in DEFCON_THRESHOLD:
+                    hit_n += 1
+                    hit_d += 1 if (g["defensive_contribution"] or 0) >= DEFCON_THRESHOLD[pos] else 0
+        per90 = (lambda x: x * 90.0 / mins) if mins else (lambda x: 0.0)
+        prior[pos] = {
+            "xg": per90(xg), "xa": per90(xa), "bonus": per90(bonus),
+            "defcon": (hit_d / hit_n) if hit_n else 0.0,
+        }
+
+    out = []
+    for p in players:
+        pid, tid, pos = p["player_id"], p["team_id"], p["position"]
+        if pos not in GOAL_PTS or tid not in teams:
+            continue
+        team_gws = team_played_gws.get(tid, [])
+        if not team_gws:
+            continue
+        ph = hist.get(pid, {})
+        recent_gws = team_gws[-RECENT_GAMES:]
+
+        def mins_of(gw):
+            g = ph.get(gw)
+            return (g["minutes"] or 0) if g else 0
+
+        # expected minutes / appearance probabilities (rotation-aware: a
+        # gameweek the player missed counts as 0 minutes)
+        all_m = [mins_of(gw) for gw in team_gws]
+        rec_m = [mins_of(gw) for gw in recent_gws]
+        exp_min = _blend(sum(rec_m) / len(rec_m), sum(all_m) / len(all_m))
+        p_any = _blend(sum(1 for m in rec_m if m > 0) / len(rec_m), sum(1 for m in all_m if m > 0) / len(all_m))
+        p60 = _blend(sum(1 for m in rec_m if m >= 60) / len(rec_m), sum(1 for m in all_m if m >= 60) / len(all_m))
+
+        if exp_min < MIN_EXPECTED_MINUTES:
+            continue
+
+        # per-90 rates: recent vs season, shrunk to the position average
+        def rate(stat):
+            def per90(gws):
+                tot_m = sum(mins_of(gw) for gw in gws)
+                tot_s = sum((ph[gw][stat] or 0) for gw in gws if gw in ph)
+                return (tot_s * 90.0 / tot_m) if tot_m else None, tot_m
+            season, season_m = per90(team_gws)
+            recent, _ = per90(recent_gws)
+            pri = prior[pos][stat]
+            if season is None:
+                return pri
+            if recent is None:
+                recent = season
+            own = _blend(recent, season)
+            w = season_m / (season_m + RATE_SHRINK_MINUTES)
+            return w * own + (1 - w) * pri
+
+        xg90, xa90, bonus90 = rate("xg"), rate("xa"), rate("bonus")
+
+        # defensive contribution hit-rate (per 60+ minute game)
+        p_def = 0.0
+        if pos in DEFCON_THRESHOLD:
+            thr = DEFCON_THRESHOLD[pos]
+            full = [ph[gw] for gw in team_gws if gw in ph and (ph[gw]["minutes"] or 0) >= 60]
+            rec = [ph[gw] for gw in recent_gws if gw in ph and (ph[gw]["minutes"] or 0) >= 60]
+            def hit(lst):
+                return sum(1 for g in lst if (g["defensive_contribution"] or 0) >= thr) / len(lst) if lst else None
+            season_hit, recent_hit = hit(full), hit(rec)
+            pri = prior[pos]["defcon"]
+            if season_hit is None:
+                p_def = pri
+            else:
+                own = _blend(recent_hit if recent_hit is not None else season_hit, season_hit)
+                w = len(full) / (len(full) + DEFCON_SHRINK_GAMES)
+                p_def = w * own + (1 - w) * pri
+
+        chance = p.get("chance_of_playing")
+        c = 1.0 if chance is None else max(0.0, min(1.0, chance / 100.0))
+
+        fx_list = []
+        for i, (gw, _ko, opp_id, is_home) in enumerate(upcoming.get(tid, [])[:max_games]):
+            avail = c if i == 0 else (c + (1 - c) * 0.5 if i == 1 else 1.0)
+            venue_me = "H" if is_home else "A"
+            venue_opp = "A" if is_home else "H"
+
+            em = exp_min * avail
+            any_p = p_any * avail
+            p60_f = p60 * avail
+
+            opp_conc = team_strength(opp_id, venue_opp, "against")
+            opp_for = team_strength(opp_id, venue_opp, "for")
+            my_conc = team_strength(tid, venue_me, "against")
+
+            goal_factor = opp_conc / league if league else 1.0
+            lam = opp_for * my_conc / league if league else 1.4  # expected goals conceded
+
+            ap_pts = any_p + p60_f
+            g_pts = xg90 * em / 90.0 * goal_factor * GOAL_PTS[pos]
+            a_pts = xa90 * em / 90.0 * goal_factor * ASSIST_PTS
+            p_cs, e_pen = _poisson_cs_and_conceded_penalty(lam)
+            cs_pts = CS_PTS[pos] * p_cs * p60_f
+            gc_pts = -(e_pen * min(1.0, em / 90.0)) if pos in ("GK", "DEF") else 0.0
+            dc_pts = DEFCON_PTS * p_def * p60_f if pos in DEFCON_THRESHOLD else 0.0
+            b_pts = bonus90 * em / 90.0
+
+            total = ap_pts + g_pts + a_pts + cs_pts + gc_pts + dc_pts + b_pts
+            opp = teams.get(opp_id, {})
+            fx_list.append({
+                "gw": gw,
+                "opp": opp.get("short_name", "?"),
+                "h": 1 if is_home else 0,
+                "p": round(total, 2),
+                "c": [round(ap_pts, 2), round(g_pts, 2), round(a_pts, 2),
+                      round(cs_pts, 2), round(gc_pts, 2), round(dc_pts, 2), round(b_pts, 2)],
+            })
+        if not fx_list:
+            continue
+
+        out.append({
+            "player_id": pid,
+            "name": p["name"],
+            "team_id": tid,
+            "team_short": p["team_short"],
+            "position": pos,
+            "minutes": p["minutes"] or 0,
+            "exp_min": round(exp_min, 1),
+            "chance": chance,
+            "news": p.get("news") or "",
+            "fixtures": fx_list,
+        })
+    return out
