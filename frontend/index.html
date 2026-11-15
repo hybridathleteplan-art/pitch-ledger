@@ -206,6 +206,11 @@
   .pf{display:inline-block;font-size:.62rem;line-height:1;padding:.18rem .3rem;margin:0 .15rem .15rem 0;border-radius:4px;border:1px solid var(--line);white-space:nowrap;}
   .pf.hi{background:#c9f7de;} .pf.mid{background:#f3f1f6;} .pf.lo{background:#fadadd;}
   .pred-note{font-family:"Helvetica Neue",Arial,sans-serif;font-size:.7rem;color:var(--mid);font-style:italic;margin:0 0 .6rem;}
+  .cmp-win{background:#d3f3e0 !important;color:#0f5f35;font-weight:800;}
+  .cmp-head{font-size:.95rem;font-weight:800;color:var(--ink);white-space:normal !important;line-height:1.2;}
+  .cmp-sub{font-size:.7rem;font-weight:500;color:var(--mid);display:block;margin-top:.15rem;}
+  .cmp-group td{background:#faf8fb !important;font-size:.6rem;letter-spacing:.07em;text-transform:uppercase;color:#7a6e84;font-weight:700;padding:.4rem .5rem;}
+  .cmp-score{padding:.7rem .9rem;font-family:"Helvetica Neue",Arial,sans-serif;font-size:.8rem;color:var(--mid);}
   .refresh-btn{
     font-family:"Helvetica Neue",Arial,sans-serif;
     font-size:.78rem;
@@ -224,6 +229,37 @@
     color:var(--mid);
     margin-left:.5rem;
   }
+
+  /* ---- table polish: paper header, hairlines, quiet colour ---- */
+  #table-wrap{background:#fff;border:1px solid #e6dfeb;border-radius:10px;}
+  #table-wrap .pred-note{padding:.7rem .9rem 0;margin:0 0 .6rem;}
+  #table-wrap .empty,#table-wrap .loading{padding:2rem 1rem;}
+  table{background:#fff;font-size:.85rem;}
+  thead th{
+    background:#faf8fb;color:#7a6e84;font-weight:700;font-size:.6rem;letter-spacing:.07em;
+    border-bottom:1px solid #d8cfde;padding:.55rem .5rem;
+  }
+  thead th.sorted{color:var(--fpl-purple);}
+  thead th.sorted::after{color:var(--fpl-purple);}
+  #table-wrap table thead th:first-child{background:#faf8fb;color:#7a6e84;}
+  tbody td{border-bottom:1px solid #f1ecf4;padding:.5rem .5rem;}
+  tbody tr:last-child td{border-bottom:none;}
+  tbody tr:nth-child(even) td{background:#fcfbfd;}
+  #table-wrap table tbody td:first-child{background:#fff;box-shadow:1px 0 0 #ece6f0;}
+  #table-wrap table tbody tr:nth-child(even) td:first-child{background:#fcfbfd;}
+  tbody tr:hover td,
+  #table-wrap table tbody tr:hover td:first-child{background:#f5f0f8;}
+  #table-wrap table th:first-child,#table-wrap table td:first-child{box-shadow:1px 0 0 #ece6f0;}
+  td.name{font-weight:600;color:var(--ink);}
+  td.num{color:#2c1f36;}
+  .pos-badge{font-family:"Helvetica Neue",Arial,sans-serif;font-weight:700;font-size:.6rem;letter-spacing:.04em;
+    padding:.12rem .38rem;border-radius:4px;background:#eee;color:#555;}
+  .pos-badge.pos-GK{background:#fdf3dc;color:#9a6700;}
+  .pos-badge.pos-DEF{background:#e3eefb;color:#1d5fa8;}
+  .pos-badge.pos-MID{background:#e2f5ea;color:#1b7f4a;}
+  .pos-badge.pos-FWD{background:#fbe4e7;color:#b02a3a;}
+  .pf{border:none;border-radius:4px;padding:.2rem .35rem;color:#2c1f36;}
+  .pf.hi{background:#dff3e7;} .pf.mid{background:#f3f0f6;} .pf.lo{background:#fae0e3;}
 </style>
 </head>
 <body>
@@ -245,6 +281,7 @@
       <button data-view="teams">Teams</button>
       <button data-view="fixtures">Fixtures</button>
       <button data-view="predicted">Predicted</button>
+      <button data-view="compare">Compare</button>
       <button data-view="results">Results</button>
     </div>
     <select id="position-filter">
@@ -262,6 +299,15 @@
       <input id="min-minutes" type="number" min="0" step="30" placeholder="e.g. 900" style="width:62px; padding:.4rem .4rem; border:1px solid var(--line); border-radius:6px;" />
       <label for="min-mpg" title="Average minutes per game played">Mins per game ≥</label>
       <input id="min-mpg" type="number" min="0" max="90" step="5" placeholder="e.g. 60" style="width:56px; padding:.4rem .4rem; border:1px solid var(--line); border-radius:6px;" />
+    </span>
+    <span id="cmp-wrap" style="display:none; align-items:center; gap:.4rem; flex-wrap:wrap; width:100%; font-family:'Helvetica Neue',Arial,sans-serif; font-size:.82rem; color:var(--mid);">
+      <input id="cmp-a" list="cmp-list" placeholder="Player A (type a name)" autocomplete="off" style="flex:1; min-width:150px;" />
+      <span>vs</span>
+      <input id="cmp-b" list="cmp-list" placeholder="Player B (type a name)" autocomplete="off" style="flex:1; min-width:150px;" />
+      <label for="cmp-count">Next</label>
+      <input id="cmp-count" type="number" min="1" max="10" value="5" style="width:56px; flex:none; min-width:0;" />
+      <span>games</span>
+      <datalist id="cmp-list"></datalist>
     </span>
     <span id="pred-count-wrap" style="display:none; align-items:center; gap:.4rem; font-family:'Helvetica Neue',Arial,sans-serif; font-size:.82rem; color:var(--mid);">
       <label for="pred-count">Next</label>
@@ -424,7 +470,7 @@ function render() {
     if (c.comingSoon) return `<td class="num" style="color:var(--mid);font-style:italic;font-size:.76rem;">Coming soon</td>`;
     if (c.key === "name") return `<td class="name">${r[c.key] ?? "—"}</td>`;
     if (c.key === "team_short" || (c.key === "name" && state.view === "teams")) return `<td class="team">${r[c.key] ?? "—"}</td>`;
-    if (c.key === "position") return `<td><span class="pos-badge">${r[c.key] ?? "—"}</span></td>`;
+    if (c.key === "position") return `<td><span class="pos-badge pos-${r[c.key]}">${r[c.key] ?? "—"}</span></td>`;
     if (c.type === "num") return `<td class="num">${fmt(r[c.key], c)}</td>`;
     return `<td>${r[c.key] ?? "—"}</td>`;
   }).join("")}</tr>`).join("")}</tbody>`;
@@ -744,7 +790,7 @@ function renderPredicted() {
     return `<tr>
       <td class="name">${r.name}</td>
       <td>${r.team_short}</td>
-      <td>${r.position}</td>
+      <td><span class="pos-badge pos-${r.position}">${r.position}</span></td>
       <td class="num"><b>${f1(r.total)}</b></td>
       <td class="num">${f1(r.perGame)}</td>
       <td class="num">${avail}</td>
@@ -761,9 +807,111 @@ function renderPredicted() {
   }).join("")}</tbody>`;
 
   document.getElementById("table-wrap").innerHTML =
-    `<div class="pred-note">Predicted FPL points over each team's next ${n} fixture${n === 1 ? "" : "s"}, using FPL scoring, recent form (60%) and season rates (40%), and the opponent's xG strength at that venue. Goalkeeper saves and card deductions are not included yet. Hover the Avail % for injury news. App/Goals/Ast/CS/GC/DCon/Bonus are the points from each source.</div>` +
+    `<div class="pred-note">Expected FPL points over each team's next ${n} fixture${n === 1 ? "" : "s"}. Goalkeeper saves and cards not included yet. Hover Avail for injury news.</div>` +
     (rows.length ? `<table>${thead}${tbody}</table>` : `<div class="empty">No players match these filters.</div>`);
 }
+
+let cmpSel = { a: null, b: null };
+const GOAL_PTS_JS = { GK: 6, DEF: 6, MID: 5, FWD: 4 };
+
+async function loadCompare() {
+  document.getElementById("table-wrap").innerHTML = `<div class="loading">Loading…</div>`;
+  try {
+    if (!predData) predData = await fetchPredictions();
+  } catch (err) {
+    document.getElementById("table-wrap").innerHTML = `<div class="empty">Could not load predictions yet.</div>`;
+    return;
+  }
+  const dl = document.getElementById("cmp-list");
+  if (!dl.children.length) {
+    predData.slice().sort((x, y) => x.name.localeCompare(y.name)).forEach(p => {
+      const o = document.createElement("option");
+      o.value = `${p.name} (${p.team_short})`;
+      dl.appendChild(o);
+    });
+  }
+  renderCompare();
+}
+
+function cmpFind(text) {
+  const t = (text || "").trim().toLowerCase();
+  if (!t) return null;
+  let hit = predData.find(p => `${p.name} (${p.team_short})`.toLowerCase() === t);
+  if (hit) return hit;
+  const matches = predData.filter(p => p.name.toLowerCase().includes(t));
+  return matches.length === 1 ? matches[0] : null;
+}
+
+function cmpSummary(p, n) {
+  const fx = p.fixtures.slice(0, n);
+  const c = [0, 0, 0, 0, 0, 0, 0];
+  let total = 0;
+  fx.forEach(f => { total += f.p; f.c.forEach((v, i) => c[i] += v); });
+  return {
+    fx, games: fx.length, total, perGame: fx.length ? total / fx.length : 0,
+    xgoals: c[1] / (GOAL_PTS_JS[p.position] || 5), xassists: c[2] / 3,
+    ap: c[0], g: c[1], a: c[2], cs: c[3], gc: c[4], dc: c[5], b: c[6],
+    exp_min: p.exp_min,
+  };
+}
+
+function renderCompare() {
+  if (!predData) return;
+  let n = parseInt(document.getElementById("cmp-count").value, 10);
+  if (!n || n < 1) n = 1;
+  if (n > 10) n = 10;
+  const A = cmpFind(document.getElementById("cmp-a").value);
+  const B = cmpFind(document.getElementById("cmp-b").value);
+  const wrap = document.getElementById("table-wrap");
+  if (!A || !B) {
+    wrap.innerHTML = `<div class="empty">Pick two players above. Start typing a name and choose from the list.</div>`;
+    return;
+  }
+  const a = cmpSummary(A, n), b = cmpSummary(B, n);
+  const rows = [
+    ["group", "Overall"],
+    ["xPts (total)", "total", 1], ["xPts per game", "perGame", 1],
+    ["group", "Expected counts"],
+    ["xGoals", "xgoals", 2], ["xAssists", "xassists", 2],
+    ["group", "Points by source"],
+    ["Appearance pts", "ap", 1], ["Goal pts", "g", 1], ["Assist pts", "a", 1],
+    ["Clean sheet pts", "cs", 1], ["Goals conceded pts", "gc", 1],
+    ["Defensive contribution pts", "dc", 1], ["Bonus pts", "b", 1],
+    ["group", "Availability"],
+    ["Expected minutes", "exp_min", 0],
+  ];
+  let winsA = 0, winsB = 0;
+  const body = rows.map(r => {
+    if (r[0] === "group") return `<tr class="cmp-group"><td colspan="3">${r[1]}</td></tr>`;
+    const [label, key, dec] = r;
+    const av = a[key], bv = b[key];
+    const eps = Math.pow(10, -(dec + 1));
+    let ca = "", cb = "";
+    if (Math.abs(av - bv) > eps) {
+      if (av > bv) { ca = "cmp-win"; winsA++; } else { cb = "cmp-win"; winsB++; }
+    }
+    return `<tr><td class="name">${label}</td><td class="num ${ca}">${av.toFixed(dec)}</td><td class="num ${cb}">${bv.toFixed(dec)}</td></tr>`;
+  }).join("");
+
+  const chips = s => s.fx.map(f => {
+    const cls = f.p >= 5 ? "hi" : f.p < 3 ? "lo" : "mid";
+    return `<span class="pf ${cls}">${f.opp} (${f.h ? "H" : "A"}) <b>${f.p.toFixed(1)}</b></span>`;
+  }).join("");
+  const avail = p => (p.chance != null && p.chance < 100) ? `${p.chance}% chance of playing${p.news ? " – " + p.news : ""}` : "";
+  const head = p => `<span class="cmp-head">${p.name}</span><span class="cmp-sub">${p.team_short} · ${p.position}</span>`;
+
+  wrap.innerHTML = `<div class="cmp-score">Over each player's next ${n} fixture${n === 1 ? "" : "s"}. Categories won: <b>${A.name} ${winsA}</b> · <b>${B.name} ${winsB}</b>. Green = better. For goals conceded, less negative is better.</div>
+    <table>
+      <thead><tr><th>Category</th><th class="num">${head(A)}</th><th class="num">${head(B)}</th></tr></thead>
+      <tbody>${body}
+        <tr><td class="name">Fixtures (xPts)</td><td style="white-space:normal;text-align:right">${chips(a)}</td><td style="white-space:normal;text-align:right">${chips(b)}</td></tr>
+        ${(avail(A) || avail(B)) ? `<tr><td class="name">Injury news</td><td style="white-space:normal;text-align:right;font-size:.75rem">${avail(A) || "—"}</td><td style="white-space:normal;text-align:right;font-size:.75rem">${avail(B) || "—"}</td></tr>` : ""}
+      </tbody>
+    </table>`;
+}
+
+["cmp-a", "cmp-b", "cmp-count"].forEach(id =>
+  document.getElementById(id).addEventListener("input", () => { if (state.view === "compare") renderCompare(); }));
 
 let teamsCache = null;
 let teamSort = { key: "points", order: "desc" };
@@ -879,6 +1027,7 @@ document.getElementById("table-wrap").addEventListener("click", (e) => {
   document.getElementById("ticker-count-wrap").style.display = "none";
   document.getElementById("search").style.display = "none";
   document.getElementById("pred-count-wrap").style.display = "none";
+  document.getElementById("cmp-wrap").style.display = "none";
   document.getElementById("player-min-wrap").style.display = "none";
   loadResults();
 });
@@ -892,11 +1041,13 @@ document.getElementById("view-toggle").addEventListener("click", (e) => {
   document.getElementById("position-filter").style.display = (state.view === "players" || state.view === "predicted") ? "" : "none";
   document.getElementById("team-filter").style.display = (state.view === "players" || state.view === "results" || state.view === "predicted") ? "" : "none";
   document.getElementById("pred-count-wrap").style.display = state.view === "predicted" ? "inline-flex" : "none";
+  document.getElementById("cmp-wrap").style.display = state.view === "compare" ? "flex" : "none";
   document.getElementById("player-min-wrap").style.display = (state.view === "players" || state.view === "predicted") ? "inline-flex" : "none";
   document.getElementById("ticker-sort").style.display = state.view === "fixtures" ? "" : "none";
   document.getElementById("ticker-count-wrap").style.display = state.view === "fixtures" ? "inline-flex" : "none";
   document.getElementById("search").style.display = (state.view === "players" || state.view === "predicted") ? "" : "none";
   if (state.view === "predicted") { loadPredicted(); return; }
+  if (state.view === "compare") { loadCompare(); return; }
   if (state.view === "players") { state.sort = "goals"; loadPlayers(); }
   else if (state.view === "teams") { state.sort = "points"; loadTeams(); }
   else if (state.view === "results") { loadResults(); }
