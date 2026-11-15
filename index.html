@@ -175,8 +175,8 @@
     left:0;
     z-index:2;
     box-shadow:2px 0 4px rgba(0,0,0,.08);
-    min-width:140px;
-    max-width:140px;
+    min-width:158px;
+    max-width:158px;
     white-space:normal;
     word-break:normal;
     line-height:1.15;
@@ -201,7 +201,7 @@
     tbody td{padding:.4rem .35rem;}
     .pos-badge{font-size:.56rem;padding:.1rem .35rem;}
     #table-wrap table th:first-child,
-    #table-wrap table td:first-child{min-width:118px;max-width:118px;}
+    #table-wrap table td:first-child{min-width:132px;max-width:132px;}
   }
   .pf{display:inline-block;font-size:.62rem;line-height:1;padding:.18rem .3rem;margin:0 .15rem .15rem 0;border-radius:4px;border:1px solid var(--line);white-space:nowrap;}
   .pf.hi{background:#c9f7de;} .pf.mid{background:#f3f1f6;} .pf.lo{background:#fadadd;}
@@ -211,10 +211,10 @@
   .cmp-sub{font-size:.7rem;font-weight:500;color:var(--mid);display:block;margin-top:.15rem;}
   .cmp-group td{background:#faf8fb !important;font-size:.6rem;letter-spacing:.07em;text-transform:uppercase;color:#7a6e84;font-weight:700;padding:.4rem .5rem;}
   .cmp-score{padding:.7rem .9rem;font-family:"Helvetica Neue",Arial,sans-serif;font-size:.8rem;color:var(--mid);}
-  .badge{width:18px;height:18px;object-fit:contain;vertical-align:middle;margin-right:.35rem;flex:none;}
+  .badge{width:24px;height:24px;object-fit:contain;vertical-align:middle;margin-right:.35rem;flex:none;}
   .pn{display:flex;align-items:center;gap:.45rem;}
-  .pface{width:28px;height:28px;border-radius:50%;object-fit:cover;object-position:top;background:#ece6f0;flex:none;}
-  .pface.big{width:44px;height:44px;margin-bottom:.3rem;}
+  .pface{width:38px;height:38px;border-radius:50%;object-fit:cover;object-position:top;background:#ece6f0;flex:none;}
+  .pface.big{width:64px;height:64px;margin-bottom:.3rem;}
   .tn{display:flex;align-items:center;}
   .refresh-btn{
     font-family:"Helvetica Neue",Arial,sans-serif;
@@ -639,7 +639,7 @@ async function loadFixtureTicker() {
         : "";
       const teamLink = `<span class="team-link" data-team-id="${r.team_id}" style="cursor:pointer;text-decoration:underline;text-decoration-style:dotted;" title="View ${r.name}'s results">${r.name}</span>`;
       if (!fx.length) {
-        return `<div class="ticker-row"><div class="team">${teamBadge(r.team_id, 22)}${teamLink}${avgBadge}</div><div class="fixtures" style="color:var(--mid);font-family:'Helvetica Neue',Arial,sans-serif;font-size:.78rem;">No upcoming fixtures loaded</div></div>`;
+        return `<div class="ticker-row"><div class="team">${teamBadge(r.team_id, 28)}${teamLink}${avgBadge}</div><div class="fixtures" style="color:var(--mid);font-family:'Helvetica Neue',Arial,sans-serif;font-size:.78rem;">No upcoming fixtures loaded</div></div>`;
       }
       const chips = fx.map(f => {
         if (f.type === "cup") {
@@ -768,14 +768,6 @@ function renderPredicted() {
     { key: "perGame", label: "xPts/G", num: true },
     { key: "chance", label: "Avail", num: true },
     { key: "fixtures", label: "Fixtures (xPts)", num: false, nosort: true },
-    { key: "ap", label: "App", num: true },
-    { key: "g", label: "Goals", num: true },
-    { key: "a", label: "Ast", num: true },
-    { key: "cs", label: "CS", num: true },
-    { key: "gc", label: "GC", num: true },
-    { key: "dc", label: "DCon", num: true },
-    { key: "b", label: "Bonus", num: true },
-    { key: "exp_min", label: "Exp min", num: true },
   ];
   const thead = `<thead><tr>${cols.map(c => `<th ${c.nosort ? "" : `data-pkey="${c.key}" style="cursor:pointer"`} class="${c.num ? "num" : ""} ${predSort.key === c.key ? "sorted" : ""} ${predSort.key === c.key && predSort.order === "asc" ? "asc" : ""}">${c.label}</th>`).join("")}</tr></thead>`;
 
@@ -800,14 +792,6 @@ function renderPredicted() {
       <td class="num">${f1(r.perGame)}</td>
       <td class="num">${avail}</td>
       <td style="min-width:150px">${chips}</td>
-      <td class="num">${f1(r.ap)}</td>
-      <td class="num">${f1(r.g)}</td>
-      <td class="num">${f1(r.a)}</td>
-      <td class="num">${f1(r.cs)}</td>
-      <td class="num">${f1(r.gc)}</td>
-      <td class="num">${f1(r.dc)}</td>
-      <td class="num">${f1(r.b)}</td>
-      <td class="num">${Math.round(r.exp_min)}</td>
     </tr>`;
   }).join("")}</tbody>`;
 
