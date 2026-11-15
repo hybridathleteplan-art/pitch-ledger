@@ -95,7 +95,7 @@ def list_teams():
     """
     query = """
         SELECT
-            t.team_id, t.name, t.short_name, t.strength,
+            t.team_id, t.name, t.short_name, t.strength, __TEAM_CODE__ AS code,
             COALESCE(res.played, 0) AS played,
             COALESCE(res.wins, 0) AS wins,
             COALESCE(res.draws, 0) AS draws,
@@ -162,6 +162,8 @@ def list_teams():
         ORDER BY t.name
     """
     with get_conn() as conn:
+        has_code = any(r["name"] == "code" for r in conn.execute("PRAGMA table_info(teams)").fetchall())
+        query = query.replace("__TEAM_CODE__", "t.code" if has_code else "NULL")
         rows = conn.execute(query).fetchall()
     return [dict(r) for r in rows]
 

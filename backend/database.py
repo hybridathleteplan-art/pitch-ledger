@@ -159,6 +159,8 @@ MIGRATIONS = [
     ("players", "chance_of_playing", "INTEGER"),
     ("players", "news", "TEXT"),
     ("players", "status", "TEXT"),
+    ("players", "code", "INTEGER"),
+    ("teams", "code", "INTEGER"),
 ]
 
 

@@ -73,12 +73,13 @@ def upsert_teams(conn, teams):
     now = datetime.datetime.utcnow().isoformat()
     for t in teams:
         conn.execute(
-            """INSERT INTO teams (team_id, name, short_name, strength, updated_at)
-               VALUES (?, ?, ?, ?, ?)
+            """INSERT INTO teams (team_id, name, short_name, strength, updated_at, code)
+               VALUES (?, ?, ?, ?, ?, ?)
                ON CONFLICT(team_id) DO UPDATE SET
                  name=excluded.name, short_name=excluded.short_name,
-                 strength=excluded.strength, updated_at=excluded.updated_at""",
-            (t["id"], t["name"], t["short_name"], t.get("strength", 0), now),
+                 strength=excluded.strength, updated_at=excluded.updated_at,
+                 code=excluded.code""",
+            (t["id"], t["name"], t["short_name"], t.get("strength", 0), now, t.get("code")),
         )
 
 
@@ -93,8 +94,8 @@ def upsert_players(conn, elements):
                  (fpl_id, name, team_id, position, minutes, goals, assists,
                   xg, xa, ict_index, price, clean_sheets, bonus,
                   defensive_contribution, points_per_game, total_points, updated_at,
-                  chance_of_playing, news, status)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                  chance_of_playing, news, status, code)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                ON CONFLICT(fpl_id) DO UPDATE SET
                  name=excluded.name, team_id=excluded.team_id,
                  position=excluded.position, minutes=excluded.minutes,
@@ -107,7 +108,8 @@ def upsert_players(conn, elements):
                  total_points=excluded.total_points,
                  updated_at=excluded.updated_at,
                  chance_of_playing=excluded.chance_of_playing,
-                 news=excluded.news, status=excluded.status""",
+                 news=excluded.news, status=excluded.status,
+                 code=excluded.code""",
             (
                 p["id"],
                 f'{p["first_name"]} {p["second_name"]}'.strip(),
@@ -129,6 +131,7 @@ def upsert_players(conn, elements):
                 p.get("chance_of_playing_next_round"),
                 p.get("news") or "",
                 p.get("status") or "a",
+                p.get("code"),
             ),
         )
     # Note: FPL's bootstrap-static no longer exposes a per-player "shots_on_target"

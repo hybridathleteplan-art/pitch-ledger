@@ -262,6 +262,7 @@ def compute_predictions(max_games=MAX_FIXTURES):
             "name": p["name"],
             "team_id": tid,
             "team_short": p["team_short"],
+            "code": p.get("code"),
             "position": pos,
             "minutes": p["minutes"] or 0,
             "exp_min": round(exp_min, 1),
