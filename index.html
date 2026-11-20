@@ -802,7 +802,7 @@ function renderPredicted() {
   }).join("")}</tbody>`;
 
   document.getElementById("table-wrap").innerHTML =
-    `<div class="pred-note">Expected FPL points over each team's next ${n} fixture${n === 1 ? "" : "s"}. Includes yellow cards and suspension risk (5 yellows by a team's 19th league game, 10 by the 32nd, 15 by season end). YC = yellows so far; Ban % = chance of missing a game to a ban. Goalkeeper saves not included yet. Hover Avail for injury news.</div>` +
+    `<div class="pred-note">Expected FPL points over each team's next ${n} fixture${n === 1 ? "" : "s"}. Includes yellow cards and suspension risk (5 yellows by a team's 19th league game, 10 by the 32nd, 15 by season end). YC = yellows so far; Ban % = chance of missing a game to a ban. Goalkeeper save points are included. Hover Avail for injury news.</div>` +
     (rows.length ? `<table>${thead}${tbody}</table>` : `<div class="empty">No players match these filters.</div>`);
 }
 
@@ -851,13 +851,13 @@ function cmpFind(text) {
 
 function cmpSummary(p, n) {
   const fx = p.fixtures.slice(0, n);
-  const c = [0, 0, 0, 0, 0, 0, 0, 0];
+  const c = [0, 0, 0, 0, 0, 0, 0, 0, 0];
   let total = 0;
   fx.forEach(f => { total += f.p; f.c.forEach((v, i) => c[i] += v); });
   return {
     fx, games: fx.length, total, perGame: fx.length ? total / fx.length : 0,
     xgoals: c[1] / (GOAL_PTS_JS[p.position] || 5), xassists: c[2] / 3,
-    ap: c[0], g: c[1], a: c[2], cs: c[3], gc: c[4], dc: c[5], b: c[6], cards: c[7] || 0,
+    ap: c[0], g: c[1], a: c[2], cs: c[3], gc: c[4], dc: c[5], b: c[6], cards: c[7] || 0, saves: c[8] || 0,
     ban: Math.min(1, fx.reduce((acc, f) => acc + (f.s || 0), 0)) * 100,
     yellows: p.yellows == null ? 0 : p.yellows,
     exp_min: p.exp_min,
@@ -887,6 +887,7 @@ function renderCompare() {
     ["Clean sheet pts", "cs", 1], ["Goals conceded pts", "gc", 1],
     ["Defensive contribution pts", "dc", 1], ["Bonus pts", "b", 1],
     ["Card pts (yellows/reds)", "cards", 1],
+    ["Save pts (GK)", "saves", 1],
     ["group", "Suspension risk"],
     ["Yellows so far", "yellows", 0, true], ["Chance of a ban (%)", "ban", 0, true],
     ["group", "Availability"],

@@ -27,7 +27,16 @@ is the one that reaches a threshold inside its window, he is banned for
 the next fixture (modelled as missing one match; the 2- and 3-match bans
 are rare enough that only the first match of the ban is modelled).
 
-Not included yet: goalkeeper saves, own goals, penalties missed or saved.
+  saves        goalkeepers only: saves/90 x expected minutes, scaled by how
+               dangerous the opponent's attack is at that venue, / 3 points
+
+Calibration (recomputed from the finished matches at every request):
+  * expected goals against are scaled so the average modelled clean-sheet
+    chance equals the real clean-sheet rate (xG runs above real goals)
+  * each position's xG and xA rates are scaled so the totals match the
+    goals and assists that really happened
+
+Not included yet: own goals, penalties missed or saved.
 
 Player rates blend 60% recent form (last 6 team games) and 40% season, then
 are pulled toward the position average while the sample is small.
@@ -91,7 +100,8 @@ def compute_predictions(max_games=MAX_FIXTURES):
             FROM player_gameweeks
         """).fetchall()
         fixtures = [dict(r) for r in conn.execute("""
-            SELECT fixture_id, gameweek, team_h, team_a, kickoff_time, finished
+            SELECT fixture_id, gameweek, team_h, team_a, kickoff_time, finished,
+                   team_h_score, team_a_score
             FROM fixtures WHERE gameweek IS NOT NULL
         """).fetchall()]
 
@@ -145,6 +155,46 @@ def compute_predictions(max_games=MAX_FIXTURES):
             return league
         k = games / (games + FIXTURE_SHRINK_GAMES)
         return league + k * (v - league)
+
+    # ---- calibration to what really happened ----------------------------
+    # Pick the scale on expected goals against so that the model's average
+    # clean-sheet chance equals the clean-sheet rate that really happened.
+    lam_list, cs_obs = [], []
+    for f in fixtures:
+        if not f["finished"] or f["team_h_score"] is None or f["team_a_score"] is None:
+            continue
+        h, a = f["team_h"], f["team_a"]
+        lam_list.append(team_strength(a, "A", "for") * team_strength(h, "H", "against") / league)
+        cs_obs.append(1 if f["team_a_score"] == 0 else 0)
+        lam_list.append(team_strength(h, "H", "for") * team_strength(a, "A", "against") / league)
+        cs_obs.append(1 if f["team_h_score"] == 0 else 0)
+    cs_scale = 1.0
+    if len(lam_list) >= 20:
+        target = sum(cs_obs) / len(cs_obs)
+        lo, hi = 0.5, 1.2
+        for _ in range(40):
+            mid = (lo + hi) / 2
+            avg_p = sum(math.exp(-mid * l) for l in lam_list) / len(lam_list)
+            if avg_p > target:
+                lo = mid   # too many clean sheets predicted -> raise lambda
+            else:
+                hi = mid
+        cs_scale = (lo + hi) / 2
+
+    goal_cal, assist_cal = {}, {}
+    for pos in ("GK", "DEF", "MID", "FWD"):
+        gs = sum(p["goals"] or 0 for p in players if p["position"] == pos)
+        xgs = sum(p["xg"] or 0 for p in players if p["position"] == pos)
+        asts = sum(p["assists"] or 0 for p in players if p["position"] == pos)
+        xas = sum(p["xa"] or 0 for p in players if p["position"] == pos)
+        goal_cal[pos] = max(0.7, min(1.3, gs / xgs)) if xgs > 5 else 1.0
+        assist_cal[pos] = max(0.7, min(2.5, asts / xas)) if xas > 5 else 1.0
+
+    # goalkeeper saves per 90 prior
+    gk = [p for p in players if p["position"] == "GK" and p.get("saves") is not None]
+    gk_min = sum(p["minutes"] or 0 for p in gk)
+    saves_prior = (sum(p["saves"] or 0 for p in gk) * 90.0 / gk_min) if gk_min else 0.0
+    league_for_att = league_for if league_for else league
 
     # ---- position priors (per 90 rates, defcon hit rate) -----------------
     prior = {}
@@ -226,6 +276,16 @@ def compute_predictions(max_games=MAX_FIXTURES):
             return w * own + (1 - w) * pri
 
         xg90, xa90, bonus90 = rate("xg"), rate("xa"), rate("bonus")
+        xg90 *= goal_cal[pos]
+        xa90 *= assist_cal[pos]
+
+        # goalkeeper saves per 90 (own season rate, shrunk to the GK average)
+        saves90 = 0.0
+        if pos == "GK" and p.get("saves") is not None:
+            sm = p["minutes"] or 0
+            own = (p["saves"] or 0) * 90.0 / sm if sm else saves_prior
+            ws = sm / (sm + RATE_SHRINK_MINUTES)
+            saves90 = ws * own + (1 - ws) * saves_prior
 
         # defensive contribution hit-rate (per 60+ minute game)
         p_def = 0.0
@@ -277,7 +337,7 @@ def compute_predictions(max_games=MAX_FIXTURES):
             my_conc = team_strength(tid, venue_me, "against")
 
             goal_factor = opp_conc / league if league else 1.0
-            lam = opp_for * my_conc / league if league else 1.4  # expected goals conceded
+            lam = (opp_for * my_conc / league if league else 1.4) * cs_scale  # expected goals conceded
 
             ap_pts = any_p + p60_f
             g_pts = xg90 * em / 90.0 * goal_factor * GOAL_PTS[pos]
@@ -287,6 +347,10 @@ def compute_predictions(max_games=MAX_FIXTURES):
             gc_pts = -(e_pen * min(1.0, em / 90.0)) if pos in ("GK", "DEF") else 0.0
             dc_pts = DEFCON_PTS * p_def * p60_f if pos in DEFCON_THRESHOLD else 0.0
             b_pts = bonus90 * em / 90.0
+            saves_pts = 0.0
+            if pos == "GK" and saves90:
+                att = opp_for / league_for_att if league_for_att else 1.0
+                saves_pts = saves90 * em / 90.0 * att / 3.0
 
             # ---- cards and yellow-card suspension -------------------------
             p_susp = 0.0
@@ -310,7 +374,7 @@ def compute_predictions(max_games=MAX_FIXTURES):
                 card_pts = -(q + 3.0 * r90 * em / 90.0)
 
             play = 1.0 - p_susp
-            parts = [ap_pts, g_pts, a_pts, cs_pts, gc_pts, dc_pts, b_pts, card_pts]
+            parts = [ap_pts, g_pts, a_pts, cs_pts, gc_pts, dc_pts, b_pts, card_pts, saves_pts]
             parts = [v * play for v in parts]
             total = sum(parts)
             opp = teams.get(opp_id, {})

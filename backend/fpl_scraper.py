@@ -94,8 +94,8 @@ def upsert_players(conn, elements):
                  (fpl_id, name, team_id, position, minutes, goals, assists,
                   xg, xa, ict_index, price, clean_sheets, bonus,
                   defensive_contribution, points_per_game, total_points, updated_at,
-                  chance_of_playing, news, status, code, yellow_cards, red_cards)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                  chance_of_playing, news, status, code, yellow_cards, red_cards, saves)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                ON CONFLICT(fpl_id) DO UPDATE SET
                  name=excluded.name, team_id=excluded.team_id,
                  position=excluded.position, minutes=excluded.minutes,
@@ -110,7 +110,8 @@ def upsert_players(conn, elements):
                  chance_of_playing=excluded.chance_of_playing,
                  news=excluded.news, status=excluded.status,
                  code=excluded.code,
-                 yellow_cards=excluded.yellow_cards, red_cards=excluded.red_cards""",
+                 yellow_cards=excluded.yellow_cards, red_cards=excluded.red_cards,
+                 saves=excluded.saves""",
             (
                 p["id"],
                 f'{p["first_name"]} {p["second_name"]}'.strip(),
@@ -135,6 +136,7 @@ def upsert_players(conn, elements):
                 p.get("code"),
                 p.get("yellow_cards", 0) or 0,
                 p.get("red_cards", 0) or 0,
+                p.get("saves", 0) or 0,
             ),
         )
     # Note: FPL's bootstrap-static no longer exposes a per-player "shots_on_target"

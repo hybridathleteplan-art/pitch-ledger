@@ -163,6 +163,7 @@ MIGRATIONS = [
     ("teams", "code", "INTEGER"),
     ("players", "yellow_cards", "INTEGER DEFAULT 0"),
     ("players", "red_cards", "INTEGER DEFAULT 0"),
+    ("players", "saves", "INTEGER DEFAULT 0"),
 ]
 
 
