@@ -78,8 +78,7 @@ def upsert_teams(conn, teams):
                ON CONFLICT(team_id) DO UPDATE SET
                  name=excluded.name, short_name=excluded.short_name,
                  strength=excluded.strength, updated_at=excluded.updated_at,
-                 code=excluded.code,
-                 yellow_cards=excluded.yellow_cards, red_cards=excluded.red_cards""",
+                 code=excluded.code""",
             (t["id"], t["name"], t["short_name"], t.get("strength", 0), now, t.get("code")),
         )
 
@@ -110,7 +109,8 @@ def upsert_players(conn, elements):
                  updated_at=excluded.updated_at,
                  chance_of_playing=excluded.chance_of_playing,
                  news=excluded.news, status=excluded.status,
-                 code=excluded.code""",
+                 code=excluded.code,
+                 yellow_cards=excluded.yellow_cards, red_cards=excluded.red_cards""",
             (
                 p["id"],
                 f'{p["first_name"]} {p["second_name"]}'.strip(),
