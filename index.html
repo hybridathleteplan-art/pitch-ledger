@@ -750,7 +750,8 @@ function renderPredicted() {
       const comp = [0, 0, 0, 0, 0, 0, 0];
       let total = 0;
       fx.forEach(f => { total += f.p; f.c.forEach((v, i) => comp[i] += v); });
-      return { ...p, fx, games: fx.length, total, perGame: fx.length ? total / fx.length : 0,
+      const ban = Math.min(1, fx.reduce((acc, f) => acc + (f.s || 0), 0)) * 100;
+      return { ...p, fx, games: fx.length, total, perGame: fx.length ? total / fx.length : 0, ban, yc: p.yellows,
                ap: comp[0], g: comp[1], a: comp[2], cs: comp[3], gc: comp[4], dc: comp[5], b: comp[6] };
     });
 
@@ -767,6 +768,8 @@ function renderPredicted() {
     { key: "total", label: "xPts", num: true },
     { key: "perGame", label: "xPts/G", num: true },
     { key: "chance", label: "Avail", num: true },
+    { key: "yc", label: "YC", num: true },
+    { key: "ban", label: "Ban %", num: true },
     { key: "fixtures", label: "Fixtures (xPts)", num: false, nosort: true },
   ];
   const thead = `<thead><tr>${cols.map(c => `<th ${c.nosort ? "" : `data-pkey="${c.key}" style="cursor:pointer"`} class="${c.num ? "num" : ""} ${predSort.key === c.key ? "sorted" : ""} ${predSort.key === c.key && predSort.order === "asc" ? "asc" : ""}">${c.label}</th>`).join("")}</tr></thead>`;
@@ -775,7 +778,8 @@ function renderPredicted() {
   const tbody = `<tbody>${rows.map(r => {
     const chips = r.fx.map(f => {
       const cls = f.p >= 5 ? "hi" : f.p < 3 ? "lo" : "mid";
-      return `<span class="pf ${cls}">${f.opp} (${f.h ? "H" : "A"}) <b>${f.p.toFixed(1)}</b></span>`;
+      const sus = (f.s || 0) >= 0.03 ? ` <i title="Chance he is suspended for this game">· ban ${Math.round(f.s * 100)}%</i>` : "";
+      return `<span class="pf ${cls}">${f.opp} (${f.h ? "H" : "A"}) <b>${f.p.toFixed(1)}</b>${sus}</span>`;
     }).join("");
     let avail = `<span style="color:var(--mid)">—</span>`;
     if (r.chance != null && r.chance < 100) {
@@ -791,12 +795,14 @@ function renderPredicted() {
       <td class="num"><b>${f1(r.total)}</b></td>
       <td class="num">${f1(r.perGame)}</td>
       <td class="num">${avail}</td>
+      <td class="num" title="Yellow cards this season">${r.yc == null ? "—" : r.yc}</td>
+      <td class="num" title="Chance of missing at least one of these games through a yellow-card ban">${r.yc == null ? "—" : (r.ban < 1 ? "–" : `<span style="color:${r.ban >= 15 ? "var(--r5)" : "#b8860b"};font-weight:700">${Math.round(r.ban)}%</span>`)}</td>
       <td style="min-width:150px">${chips}</td>
     </tr>`;
   }).join("")}</tbody>`;
 
   document.getElementById("table-wrap").innerHTML =
-    `<div class="pred-note">Expected FPL points over each team's next ${n} fixture${n === 1 ? "" : "s"}. Goalkeeper saves and cards not included yet. Hover Avail for injury news.</div>` +
+    `<div class="pred-note">Expected FPL points over each team's next ${n} fixture${n === 1 ? "" : "s"}. Includes yellow cards and suspension risk (5 yellows by a team's 19th league game, 10 by the 32nd, 15 by season end). YC = yellows so far; Ban % = chance of missing a game to a ban. Goalkeeper saves not included yet. Hover Avail for injury news.</div>` +
     (rows.length ? `<table>${thead}${tbody}</table>` : `<div class="empty">No players match these filters.</div>`);
 }
 
@@ -845,13 +851,15 @@ function cmpFind(text) {
 
 function cmpSummary(p, n) {
   const fx = p.fixtures.slice(0, n);
-  const c = [0, 0, 0, 0, 0, 0, 0];
+  const c = [0, 0, 0, 0, 0, 0, 0, 0];
   let total = 0;
   fx.forEach(f => { total += f.p; f.c.forEach((v, i) => c[i] += v); });
   return {
     fx, games: fx.length, total, perGame: fx.length ? total / fx.length : 0,
     xgoals: c[1] / (GOAL_PTS_JS[p.position] || 5), xassists: c[2] / 3,
-    ap: c[0], g: c[1], a: c[2], cs: c[3], gc: c[4], dc: c[5], b: c[6],
+    ap: c[0], g: c[1], a: c[2], cs: c[3], gc: c[4], dc: c[5], b: c[6], cards: c[7] || 0,
+    ban: Math.min(1, fx.reduce((acc, f) => acc + (f.s || 0), 0)) * 100,
+    yellows: p.yellows == null ? 0 : p.yellows,
     exp_min: p.exp_min,
   };
 }
@@ -878,18 +886,22 @@ function renderCompare() {
     ["Appearance pts", "ap", 1], ["Goal pts", "g", 1], ["Assist pts", "a", 1],
     ["Clean sheet pts", "cs", 1], ["Goals conceded pts", "gc", 1],
     ["Defensive contribution pts", "dc", 1], ["Bonus pts", "b", 1],
+    ["Card pts (yellows/reds)", "cards", 1],
+    ["group", "Suspension risk"],
+    ["Yellows so far", "yellows", 0, true], ["Chance of a ban (%)", "ban", 0, true],
     ["group", "Availability"],
     ["Expected minutes", "exp_min", 0],
   ];
   let winsA = 0, winsB = 0;
   const body = rows.map(r => {
     if (r[0] === "group") return `<tr class="cmp-group"><td colspan="3">${r[1]}</td></tr>`;
-    const [label, key, dec] = r;
+    const [label, key, dec, lowerBetter] = r;
     const av = a[key], bv = b[key];
     const eps = Math.pow(10, -(dec + 1));
     let ca = "", cb = "";
     if (Math.abs(av - bv) > eps) {
-      if (av > bv) { ca = "cmp-win"; winsA++; } else { cb = "cmp-win"; winsB++; }
+      const aWins = lowerBetter ? av < bv : av > bv;
+      if (aWins) { ca = "cmp-win"; winsA++; } else { cb = "cmp-win"; winsB++; }
     }
     return `<tr><td class="name">${label}</td><td class="num ${ca}">${av.toFixed(dec)}</td><td class="num ${cb}">${bv.toFixed(dec)}</td></tr>`;
   }).join("");

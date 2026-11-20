@@ -78,7 +78,8 @@ def upsert_teams(conn, teams):
                ON CONFLICT(team_id) DO UPDATE SET
                  name=excluded.name, short_name=excluded.short_name,
                  strength=excluded.strength, updated_at=excluded.updated_at,
-                 code=excluded.code""",
+                 code=excluded.code,
+                 yellow_cards=excluded.yellow_cards, red_cards=excluded.red_cards""",
             (t["id"], t["name"], t["short_name"], t.get("strength", 0), now, t.get("code")),
         )
 
@@ -94,8 +95,8 @@ def upsert_players(conn, elements):
                  (fpl_id, name, team_id, position, minutes, goals, assists,
                   xg, xa, ict_index, price, clean_sheets, bonus,
                   defensive_contribution, points_per_game, total_points, updated_at,
-                  chance_of_playing, news, status, code)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                  chance_of_playing, news, status, code, yellow_cards, red_cards)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                ON CONFLICT(fpl_id) DO UPDATE SET
                  name=excluded.name, team_id=excluded.team_id,
                  position=excluded.position, minutes=excluded.minutes,
@@ -132,6 +133,8 @@ def upsert_players(conn, elements):
                 p.get("news") or "",
                 p.get("status") or "a",
                 p.get("code"),
+                p.get("yellow_cards", 0) or 0,
+                p.get("red_cards", 0) or 0,
             ),
         )
     # Note: FPL's bootstrap-static no longer exposes a per-player "shots_on_target"

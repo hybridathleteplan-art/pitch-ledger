@@ -161,6 +161,8 @@ MIGRATIONS = [
     ("players", "status", "TEXT"),
     ("players", "code", "INTEGER"),
     ("teams", "code", "INTEGER"),
+    ("players", "yellow_cards", "INTEGER DEFAULT 0"),
+    ("players", "red_cards", "INTEGER DEFAULT 0"),
 ]
 
 
