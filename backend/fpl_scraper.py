@@ -53,7 +53,9 @@ def upsert_fixtures(conn, fixtures):
                 f["team_h"],
                 f["team_a"],
                 f.get("kickoff_time"),
-                1 if f.get("finished") else 0,
+                # FPL only flips "finished" once bonus points are confirmed, which can be
+                # a day later. "finished_provisional" is set as soon as the match is over.
+                1 if (f.get("finished") or f.get("finished_provisional")) else 0,
                 f.get("team_h_score"),
                 f.get("team_a_score"),
             ),
@@ -94,8 +96,9 @@ def upsert_players(conn, elements):
                  (fpl_id, name, team_id, position, minutes, goals, assists,
                   xg, xa, ict_index, price, clean_sheets, bonus,
                   defensive_contribution, points_per_game, total_points, updated_at,
-                  chance_of_playing, news, status, code, yellow_cards, red_cards, saves)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                  chance_of_playing, news, status, code, yellow_cards, red_cards, saves,
+                  pen_order, fk_order, corner_order)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                ON CONFLICT(fpl_id) DO UPDATE SET
                  name=excluded.name, team_id=excluded.team_id,
                  position=excluded.position, minutes=excluded.minutes,
@@ -111,7 +114,9 @@ def upsert_players(conn, elements):
                  news=excluded.news, status=excluded.status,
                  code=excluded.code,
                  yellow_cards=excluded.yellow_cards, red_cards=excluded.red_cards,
-                 saves=excluded.saves""",
+                 saves=excluded.saves,
+                 pen_order=excluded.pen_order, fk_order=excluded.fk_order,
+                 corner_order=excluded.corner_order""",
             (
                 p["id"],
                 f'{p["first_name"]} {p["second_name"]}'.strip(),
@@ -137,6 +142,9 @@ def upsert_players(conn, elements):
                 p.get("yellow_cards", 0) or 0,
                 p.get("red_cards", 0) or 0,
                 p.get("saves", 0) or 0,
+                p.get("penalties_order"),
+                p.get("direct_freekicks_order"),
+                p.get("corners_and_indirect_freekicks_order"),
             ),
         )
     # Note: FPL's bootstrap-static no longer exposes a per-player "shots_on_target"

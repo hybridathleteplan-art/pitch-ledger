@@ -164,6 +164,9 @@ MIGRATIONS = [
     ("players", "yellow_cards", "INTEGER DEFAULT 0"),
     ("players", "red_cards", "INTEGER DEFAULT 0"),
     ("players", "saves", "INTEGER DEFAULT 0"),
+    ("players", "pen_order", "INTEGER"),
+    ("players", "fk_order", "INTEGER"),
+    ("players", "corner_order", "INTEGER"),
 ]
 
 

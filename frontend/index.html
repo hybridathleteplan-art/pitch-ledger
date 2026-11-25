@@ -216,6 +216,8 @@
   .pface{width:38px;height:38px;border-radius:50%;object-fit:cover;object-position:top;background:#ece6f0;flex:none;}
   .pface.big{width:64px;height:64px;margin-bottom:.3rem;}
   .tn{display:flex;align-items:center;}
+  .tag{display:inline-block;font-size:.55rem;font-weight:800;letter-spacing:.04em;padding:.08rem .28rem;margin-left:.3rem;border-radius:3px;vertical-align:middle;}
+  .tag.pk{background:#fdf3dc;color:#9a6700;} .tag.pk2{background:#f3f0f6;color:#7a6e84;} .tag.sp{background:#e3eefb;color:#1d5fa8;}
   .refresh-btn{
     font-family:"Helvetica Neue",Arial,sans-serif;
     font-size:.78rem;
@@ -789,7 +791,7 @@ function renderPredicted() {
       avail = `<span title="${r.news.replace(/"/g, "&quot;")}">ℹ</span>`;
     }
     return `<tr>
-      <td class="name"><span class="pn">${playerFace(r.code)}<span>${r.name}</span></span></td>
+      <td class="name"><span class="pn">${playerFace(r.code)}<span>${r.name}${r.pk === 1 ? '<span class="tag pk" title="First-choice penalty taker">PK</span>' : r.pk === 2 ? '<span class="tag pk2" title="Second-choice penalty taker">PK2</span>' : ""}${r.sp ? '<span class="tag sp" title="First-choice corner or free-kick taker">SP</span>' : ""}</span></span></td>
       <td><span class="tn">${teamBadge(r.team_id)}${r.team_short}</span></td>
       <td><span class="pos-badge pos-${r.position}">${r.position}</span></td>
       <td class="num"><b>${f1(r.total)}</b></td>
@@ -802,7 +804,7 @@ function renderPredicted() {
   }).join("")}</tbody>`;
 
   document.getElementById("table-wrap").innerHTML =
-    `<div class="pred-note">Expected FPL points over each team's next ${n} fixture${n === 1 ? "" : "s"}. Includes yellow cards and suspension risk (5 yellows by a team's 19th league game, 10 by the 32nd, 15 by season end). YC = yellows so far; Ban % = chance of missing a game to a ban. Goalkeeper save points are included. Hover Avail for injury news.</div>` +
+    `<div class="pred-note">Expected FPL points over each team's next ${n} fixture${n === 1 ? "" : "s"}. Includes yellow cards and suspension risk (5 yellows by a team's 19th league game, 10 by the 32nd, 15 by season end). YC = yellows so far; Ban % = chance of missing a game to a ban. PK = first-choice penalty taker, SP = first-choice corner or free-kick taker. Goalkeeper save points are included. Hover Avail for injury news.</div>` +
     (rows.length ? `<table>${thead}${tbody}</table>` : `<div class="empty">No players match these filters.</div>`);
 }
 

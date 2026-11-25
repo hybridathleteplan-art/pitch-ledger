@@ -36,6 +36,18 @@ Calibration (recomputed from the finished matches at every request):
   * each position's xG and xA rates are scaled so the totals match the
     goals and assists that really happened
 
+Set-piece roles (FPL's own penalty / free-kick / corner order):
+  The player's xG and xA come from his own history, which already includes
+  penalties and set pieces he has taken. The role only changes the starting
+  point (the "prior") his small-sample rates are pulled toward:
+    first-choice penalty taker   prior xG/90 + 0.10  (~0.13 pens a team-match x 0.76)
+    second-choice taker          prior xG/90 + 0.02   (+0.07 if the first is out)
+    first-choice corner / indirect free-kick taker   prior xA/90 + 0.05
+    first-choice direct free-kick taker              prior xG/90 + 0.02
+  Established players (10+ full games) mostly follow their own history, so the
+  role matters most for new takers and short samples. These bumps are
+  judgement-based constants and can be tuned.
+
 Not included yet: own goals, penalties missed or saved.
 
 Player rates blend 60% recent form (last 6 team games) and 40% season, then
@@ -67,6 +79,10 @@ ASSIST_PTS = 3
 
 RATE_SHRINK_MINUTES = 900   # ~10 full games before a player's own rate dominates
 DEFCON_SHRINK_GAMES = 5
+PEN_BUMP = {1: 0.10, 2: 0.02}
+PEN_BUMP_BACKUP_WHEN_FIRST_OUT = 0.07
+CORNER_XA_BUMP = 0.05
+DIRECT_FK_XG_BUMP = 0.02
 FIXTURE_SHRINK_GAMES = 4    # venue games of the opponent before its numbers dominate
 
 
@@ -232,6 +248,14 @@ def compute_predictions(max_games=MAX_FIXTURES):
                 rs += p.get("red_cards") or 0
         card_prior[pos] = (ys * 90 / mins, rs * 90 / mins) if mins else (0.0, 0.0)
 
+    # teams whose first-choice penalty taker is unlikely to play
+    first_taker_out = set()
+    for p in players:
+        if p.get("pen_order") == 1:
+            ch = p.get("chance_of_playing")
+            if (ch is not None and ch < 50) or p.get("status") in ("i", "s", "u"):
+                first_taker_out.add(p["team_id"])
+
     out = []
     for p in players:
         pid, tid, pos = p["player_id"], p["team_id"], p["position"]
@@ -267,6 +291,19 @@ def compute_predictions(max_games=MAX_FIXTURES):
             season, season_m = per90(team_gws)
             recent, _ = per90(recent_gws)
             pri = prior[pos][stat]
+            pen_o, fk_o, ck_o = p.get("pen_order"), p.get("fk_order"), p.get("corner_order")
+            if stat == "xg":
+                if pen_o in PEN_BUMP:
+                    bump = PEN_BUMP[pen_o]
+                    if pen_o == 2 and tid in first_taker_out:
+                        bump = PEN_BUMP_BACKUP_WHEN_FIRST_OUT
+                    if pen_o == 1 and p.get("status") in ("i", "s", "u"):
+                        bump = 0.0
+                    pri += bump
+                if fk_o == 1:
+                    pri += DIRECT_FK_XG_BUMP
+            elif stat == "xa" and ck_o == 1:
+                pri += CORNER_XA_BUMP
             if season is None:
                 return pri
             if recent is None:
@@ -401,6 +438,8 @@ def compute_predictions(max_games=MAX_FIXTURES):
             "exp_min": round(exp_min, 1),
             "chance": chance,
             "yellows": yellows,
+            "pk": p.get("pen_order"),
+            "sp": 1 if (p.get("corner_order") == 1 or p.get("fk_order") == 1) else 0,
             "news": p.get("news") or "",
             "fixtures": fx_list,
         })
